@@ -1,8 +1,23 @@
-# Station IoT industrielle ESP32 — FreeRTOS, MQTT, Node-RED, Offline & Supervision
+# Station IoT ESP32 — FreeRTOS, MQTT, Radar HC-SR04, Offline & Supervision
 
-Projet réalisé dans le cadre de la mission IoT : conception d’une station connectée industrielle robuste, maintenable et capable de continuer à fonctionner même en cas de panne réseau.
+Projet IoT réalisé avec un **ESP32 DOIT DevKit V1**.  
+La station connectée mesure l’environnement, détecte des objets avec un radar ultrason **HC-SR04**, publie les données en MQTT, conserve les mesures en cas de panne réseau et propose une interface Web locale simple et fonctionnelle.
 
-La station utilise un **ESP32 DOIT DevKit V1**, plusieurs capteurs, une interface Web embarquée, MQTT, Node-RED, une base locale LittleFS, des tâches FreeRTOS, un mode offline/replay, une page de supervision CPU et une page de jeux contrôlés par joystick.
+Le projet est conçu pour répondre à une architecture industrielle robuste :
+
+```text
+Capteurs
+  ↓
+TaskSensors
+  ↓
+Queue FreeRTOS
+  ↓
+TaskMQTT
+  ↓
+Broker MQTT
+  ↓
+Node-RED / Base NoSQL
+```
 
 ---
 
@@ -11,45 +26,36 @@ La station utilise un **ESP32 DOIT DevKit V1**, plusieurs capteurs, une interfac
 - [Objectif du projet](#objectif-du-projet)
 - [Fonctionnalités principales](#fonctionnalités-principales)
 - [Matériel utilisé](#matériel-utilisé)
-- [Schéma de branchement](#schéma-de-branchement)
-- [Tableau des branchements](#tableau-des-branchements)
+- [Branchement final](#branchement-final)
 - [Architecture logicielle](#architecture-logicielle)
-- [Tâches FreeRTOS et priorités](#tâches-freertos-et-priorités)
+- [Répartition FreeRTOS](#répartition-freertos)
+- [Radar HC-SR04](#radar-hc-sr04)
 - [MQTT et Node-RED](#mqtt-et-node-red)
 - [Mode offline et replay](#mode-offline-et-replay)
-- [Base de données locale](#base-de-données-locale)
-- [Sécurité](#sécurité)
 - [Interface Web](#interface-web)
-- [Jeux joystick HW-504](#jeux-joystick-hw-504)
+- [Jeux joystick](#jeux-joystick)
 - [Installation PlatformIO](#installation-platformio)
 - [Tests recommandés](#tests-recommandés)
 - [Dépannage](#dépannage)
-- [Ce qu’il faut expliquer à la soutenance](#ce-quil-faut-expliquer-à-la-soutenance)
+- [À expliquer à la soutenance](#à-expliquer-à-la-soutenance)
+- [Auteurs](#auteurs)
 
 ---
 
 ## Objectif du projet
 
-Le but est de créer une station IoT industrielle capable de :
+L’objectif est de concevoir une station IoT capable de :
 
-- lire des capteurs en continu ;
-- publier les mesures en MQTT ;
-- afficher les mesures sur une interface Web locale ;
-- fonctionner sans blocage grâce à FreeRTOS ;
-- conserver les données quand le WiFi ou MQTT tombe ;
-- rejouer les données stockées quand le réseau revient ;
+- lire plusieurs capteurs ;
+- détecter un objet ou une intrusion avec un **HC-SR04** ;
+- afficher les données sur un site Web embarqué dans l’ESP32 ;
+- publier les mesures vers un broker MQTT ;
+- fonctionner même si MQTT ou WiFi tombe ;
+- stocker les mesures localement en mode offline ;
+- rejouer les données quand le réseau revient ;
 - superviser l’état du système ;
-- détecter des pannes capteur ;
-- être expliquée facilement à l’oral.
-
-Le projet respecte l’idée principale de la mission :
-
-```text
-TaskSensors → Queue → TaskMQTT → Broker MQTT → Node-RED → Base NoSQL
-                         │
-                         ├── TaskWeb
-                         └── TaskSupervision
-```
+- répartir les tâches sur les deux cœurs de l’ESP32 ;
+- garder un `loop()` vide grâce à FreeRTOS.
 
 ---
 
@@ -57,137 +63,70 @@ TaskSensors → Queue → TaskMQTT → Broker MQTT → Node-RED → Base NoSQL
 
 ### Capteurs
 
-- DHT22 : température et humidité.
-- PIR HC-SR501 : détection de mouvement.
-- Capteur gaz MQ : mesure analogique de gaz.
-- HW-499 : détection d’événement / inclinaison selon le module.
-- Joystick HW-504 : contrôle des jeux sur la page Web.
-- Bouton physique : sécurité / acquittement alarme.
+| Capteur | Rôle |
+|---|---|
+| DHT22 | Température et humidité |
+| HC-SR04 | Radar ultrason / distance / détection d’objet |
+| Capteur gaz MQ | Mesure analogique gaz |
+| HW-499 | Détection événement / choc / inclinaison selon le module |
+| Joystick HW-504 | Contrôle des jeux Web |
+| Bouton poussoir | Sécurité / acquittement alarme |
 
 ### Actionneurs
 
-- LED rouge : danger.
-- LED bleue : état normal.
-- LED verte : WiFi / système OK.
-- LED jaune : alerte modérée.
-- LED blanche ou RGB simple : mode sécurité / information.
-- Buzzer alarme.
-- Buzzer musique.
+| Actionneur | Rôle |
+|---|---|
+| LED rouge | Danger / intrusion |
+| LED bleue | État normal |
+| LED verte | WiFi / système OK |
+| LED jaune | Alerte |
+| LED blanche | Mode sécurité / information |
+| Buzzer alarme | Signal sonore intrusion |
+| Buzzer musique | Feedback / sons simples |
 
 ### Logiciel
 
-- FreeRTOS avec plusieurs tâches séparées.
+- FreeRTOS avec tâches séparées.
 - `loop()` vide.
-- Aucun `delay()` classique.
-- Utilisation de `vTaskDelay()`.
-- Queue FreeRTOS entre capteurs et MQTT.
-- Mutex uniquement pour les ressources partagées.
-- MQTT via `PubSubClient`.
-- Serveur Web local via `ESPAsyncWebServer`.
-- LittleFS pour base locale.
-- Offline/replay.
-- Supervision heap, uptime, WiFi, MQTT, latence.
-- Page jeux avec joystick.
-- Page supervision CPU double cœur.
-- Interface claire, classique et lisible.
+- Queue entre `TaskSensors` et `TaskMQTT`.
+- Mutex pour protéger l’état partagé.
+- MQTT avec `PubSubClient`.
+- Serveur Web local avec `ESPAsyncWebServer`.
+- Stockage local avec LittleFS.
+- Offline/replay MQTT.
+- Supervision CPU Core 0 / Core 1.
+- Interface Web simple.
+- Graphiques séparés.
+- Radar visuel.
+- Jeux joystick.
+- Sécurité Web par login + token API.
+- Correction LEDC pour éviter l’erreur buzzer.
 
 ---
 
 ## Matériel utilisé
 
-| Composant | Rôle |
-|---|---|
-| ESP32 DOIT DevKit V1 | Microcontrôleur principal |
-| DHT22 | Température + humidité |
-| PIR HC-SR501 | Détection de mouvement |
-| Capteur MQ gaz | Détection gaz analogique |
-| HW-499 | Détection événement / inclinaison |
-| HW-504 joystick | Contrôle des jeux Web |
-| Bouton poussoir | Sécurité / acquittement |
-| LED rouge | Danger |
-| LED bleue | Normal |
-| LED verte | WiFi OK |
-| LED jaune | Warning |
-| LED blanche ou RGB | Information / sécurité |
-| Buzzer 1 | Alarme |
-| Buzzer 2 | Musiques / feedback |
-| Résistances 220 Ω ou 330 Ω | Protection LEDs |
+| Élément | Quantité | Rôle |
+|---|---:|---|
+| ESP32 DOIT DevKit V1 | 1 | Carte principale |
+| DHT22 | 1 | Température / humidité |
+| HC-SR04 | 1 | Distance / radar |
+| Capteur gaz MQ | 1 | Mesure gaz analogique |
+| HW-499 | 1 | Détection événement |
+| Joystick HW-504 | 1 | Contrôle jeux |
+| Bouton poussoir | 1 | Sécurité / acquittement |
+| LED rouge | 1 | Danger |
+| LED bleue | 1 | Normal |
+| LED verte | 1 | WiFi OK |
+| LED jaune | 1 | Warning |
+| LED blanche / RGB simple | 1 | Sécurité / info |
+| Buzzer alarme | 1 | Alarme |
+| Buzzer musique | 1 | Feedback |
+| Résistances 220 Ω ou 330 Ω | Plusieurs | Protection LEDs |
 
 ---
 
-## Schéma de branchement
-
-Schéma logique compatible GitHub Mermaid :
-
-```mermaid
-flowchart LR
-    ESP32["ESP32 DOIT DevKit V1"]
-
-    subgraph Alim["Alimentation commune"]
-        V3V["3V3"]
-        GND["GND"]
-    end
-
-    DHT["DHT22<br/>Température / Humidité"]
-    PIR["PIR HC-SR501<br/>Mouvement"]
-    MQ["Capteur gaz MQ<br/>Analogique"]
-    HW499["HW-499<br/>Événement"]
-    JOY["Joystick HW-504<br/>VRX / VRY / SW"]
-    BTN["Bouton poussoir"]
-
-    LEDR["LED rouge + 220Ω"]
-    LEDB["LED bleue + 220Ω"]
-    LEDG["LED verte + 220Ω"]
-    LEDY["LED jaune + 220Ω"]
-    LEDW["LED blanche/RGB + 220Ω"]
-
-    BUZ1["Buzzer alarme"]
-    BUZ2["Buzzer musique"]
-
-    V3V --> DHT
-    V3V --> PIR
-    V3V --> MQ
-    V3V --> HW499
-    V3V --> JOY
-
-    GND --> DHT
-    GND --> PIR
-    GND --> MQ
-    GND --> HW499
-    GND --> JOY
-    GND --> BTN
-    GND --> LEDR
-    GND --> LEDB
-    GND --> LEDG
-    GND --> LEDY
-    GND --> LEDW
-    GND --> BUZ1
-    GND --> BUZ2
-
-    DHT -- DATA --> GPIO4["GPIO4"]
-    PIR -- OUT --> GPIO26["GPIO26"]
-    MQ -- AO --> GPIO34["GPIO34 ADC"]
-    HW499 -- S --> GPIO33["GPIO33"]
-
-    JOY -- VRX --> GPIO32["GPIO32 ADC"]
-    JOY -- VRY --> GPIO35["GPIO35 ADC"]
-    JOY -- SW --> GPIO23["GPIO23"]
-
-    BTN -- Signal --> GPIO25["GPIO25"]
-
-    LEDR -- Signal --> GPIO5["GPIO5"]
-    LEDB -- Signal --> GPIO18["GPIO18"]
-    LEDG -- Signal --> GPIO19["GPIO19"]
-    LEDY -- Signal --> GPIO21["GPIO21"]
-    LEDW -- Signal --> GPIO22["GPIO22"]
-
-    BUZ1 -- Plus --> GPIO12["GPIO12"]
-    BUZ2 -- Plus --> GPIO27["GPIO27"]
-```
-
----
-
-## Tableau des branchements
+## Branchement final
 
 ### Capteurs
 
@@ -196,12 +135,13 @@ flowchart LR
 | DHT22 | VCC | 3V3 | Alimentation |
 | DHT22 | GND | GND | Masse commune |
 | DHT22 | DATA | GPIO4 | Température / humidité |
-| PIR HC-SR501 | VCC | 3V3 | Version 3V3 demandée |
-| PIR HC-SR501 | GND | GND | Masse commune |
-| PIR HC-SR501 | OUT | GPIO26 | Détection mouvement |
-| MQ gaz | VCC | 3V3 | AO direct si module alimenté en 3V3 |
+| HC-SR04 | VCC | 3V3 | Version 3V3 recommandée |
+| HC-SR04 | GND | GND | Masse commune |
+| HC-SR04 | TRIG | GPIO14 | Déclenchement ultrason |
+| HC-SR04 | ECHO | GPIO26 | Reprise de l’ancien fil PIR OUT |
+| MQ gaz | VCC | 3V3 | Module alimenté en 3V3 |
 | MQ gaz | GND | GND | Masse commune |
-| MQ gaz | AO | GPIO34 | Entrée analogique ADC |
+| MQ gaz | AO | GPIO34 | Entrée analogique |
 | HW-499 | + | 3V3 | Alimentation |
 | HW-499 | - | GND | Masse commune |
 | HW-499 | S | GPIO33 | Signal numérique |
@@ -217,19 +157,69 @@ flowchart LR
 
 | Élément | ESP32 | Branchement |
 |---|---:|---|
-| LED rouge | GPIO5 | GPIO → résistance 220 Ω → LED → GND |
-| LED bleue | GPIO18 | GPIO → résistance 220 Ω → LED → GND |
-| LED verte | GPIO19 | GPIO → résistance 220 Ω → LED → GND |
-| LED jaune | GPIO21 | GPIO → résistance 220 Ω → LED → GND |
-| LED blanche/RGB | GPIO22 | GPIO → résistance 220 Ω → LED → GND |
-| Buzzer alarme | GPIO12 | GPIO12 → + buzzer, - buzzer → GND |
-| Buzzer musique | GPIO27 | GPIO27 → + buzzer, - buzzer → GND |
+| LED rouge | GPIO5 | GPIO → résistance → LED → GND |
+| LED bleue | GPIO18 | GPIO → résistance → LED → GND |
+| LED verte | GPIO19 | GPIO → résistance → LED → GND |
+| LED jaune | GPIO21 | GPIO → résistance → LED → GND |
+| LED blanche | GPIO22 | GPIO → résistance → LED → GND |
+| Buzzer alarme | GPIO12 | GPIO12 → + buzzer, - → GND |
+| Buzzer musique | GPIO27 | GPIO27 → + buzzer, - → GND |
 
-> Important : toutes les masses doivent être communes.
+> Toutes les masses doivent être reliées ensemble.
 
-> GPIO34 et GPIO35 sont des entrées uniquement. C’est adapté pour MQ AO et joystick VRY.
+> GPIO34 et GPIO35 sont uniquement des entrées. C’est normal : ils sont utilisés pour le gaz analogique et le joystick.
 
-> Si l’ESP32 ne démarre pas correctement avec le buzzer sur GPIO12, déplacer ce buzzer vers un autre GPIO libre et modifier `BUZZER_ALARM_PIN`.
+> Si le HC-SR04 classique ne répond pas bien en 3V3, utiliser une version compatible 3V3 comme HC-SR04P. Éviter d’envoyer un signal ECHO 5V directement sur l’ESP32.
+
+---
+
+## Schéma de branchement
+
+```mermaid
+flowchart LR
+    ESP32["ESP32 DOIT DevKit V1"]
+
+    DHT["DHT22"]
+    HCSR["HC-SR04<br/>Radar ultrason"]
+    MQ["Capteur gaz MQ"]
+    HW["HW-499"]
+    JOY["Joystick HW-504"]
+    BTN["Bouton"]
+
+    LR["LED rouge"]
+    LB["LED bleue"]
+    LV["LED verte"]
+    LJ["LED jaune"]
+    LW["LED blanche"]
+
+    BZ1["Buzzer alarme"]
+    BZ2["Buzzer musique"]
+
+    DHT -- DATA --> G4["GPIO4"]
+    HCSR -- TRIG --> G14["GPIO14"]
+    HCSR -- ECHO --> G26["GPIO26"]
+    MQ -- AO --> G34["GPIO34"]
+    HW -- S --> G33["GPIO33"]
+    JOY -- VRX --> G32["GPIO32"]
+    JOY -- VRY --> G35["GPIO35"]
+    JOY -- SW --> G23["GPIO23"]
+    BTN -- Signal --> G25["GPIO25"]
+
+    LR --> G5["GPIO5"]
+    LB --> G18["GPIO18"]
+    LV --> G19["GPIO19"]
+    LJ --> G21["GPIO21"]
+    LW --> G22["GPIO22"]
+
+    BZ1 --> G12["GPIO12"]
+    BZ2 --> G27["GPIO27"]
+
+    ESP32 --- DHT
+    ESP32 --- HCSR
+    ESP32 --- MQ
+    ESP32 --- HW
+    ESP32 --- JOY
+```
 
 ---
 
@@ -237,15 +227,16 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    Sensors["TaskSensors<br/>Lecture DHT22, MQ, PIR, HW-499, bouton, joystick"]
+    Sensors["TaskSensors<br/>DHT22, gaz, HC-SR04, HW-499, bouton, joystick"]
     Queue["Queue FreeRTOS<br/>SensorPacket"]
-    MQTT["TaskMQTT<br/>Publication MQTT + Offline + Replay"]
+    MQTT["TaskMQTT<br/>MQTT + Offline + Replay"]
     Broker["Broker MQTT<br/>test.mosquitto.org"]
-    NodeRED["Node-RED<br/>Dashboard / Debug / BDD"]
-    Web["TaskWeb<br/>Interface Web locale"]
-    Sup["TaskSupervision<br/>Alertes, risque, diagnostic"]
+    NodeRED["Node-RED<br/>debug / dashboard / BDD"]
     FS["LittleFS<br/>offline.jsonl<br/>history.jsonl"]
-    UI["Navigateur<br/>Dashboard ESP32"]
+    Web["ESPAsyncWebServer<br/>Interface locale"]
+    UI["Navigateur Web"]
+    Act["TaskActuators<br/>LEDs + buzzer"]
+    CPU["TaskCpuMonitor<br/>Core 0 / Core 1"]
 
     Sensors --> Queue
     Queue --> MQTT
@@ -255,42 +246,107 @@ flowchart TB
     MQTT --> FS
     FS --> MQTT
 
-    Sensors --> Sup
-    Sup --> Web
     Web --> UI
-    FS --> Web
+    Sensors --> Act
+    CPU --> Web
 ```
 
 ---
 
-## Tâches FreeRTOS et priorités
+## Répartition FreeRTOS
 
-| Tâche | Priorité | Cœur ESP32 | Rôle |
+La version finale répartit les charges entre les deux cœurs de l’ESP32.
+
+| Tâche | Priorité | Cœur | Rôle |
 |---|---:|---:|---|
-| `TaskSensors` | 3 | Core 1 | Acquisition capteurs, bouton, joystick, création des paquets |
-| `TaskMQTT` | 2 | Core 0 | Publication MQTT, offline, replay, latence |
-| `TaskSupervision` | 2 | Core 1 | Alertes, risque global, panne capteurs |
+| `TaskSensors` | 3 | Core 1 | Lecture DHT22, gaz, HC-SR04, HW-499, joystick, bouton |
+| `TaskActuators` | 2 | Core 1 | LEDs et buzzer |
+| `TaskMQTT` | 2 | Core 0 | MQTT, offline, replay, LittleFS |
 | `TaskWiFi` | 1 | Core 0 | Reconnexion WiFi |
-| `TaskWeb` | 1 | Core 0 | Serveur Web asynchrone / heartbeat |
-| `TaskLights` | 1 | Core 1 | LEDs et effets lumineux |
-| `TaskAlarmBuzzer` | 1 ou 2 | Core 1 | Alarme sonore |
-| `TaskMusicBuzzer` | 1 | Core 1 | Musiques buzzer |
-| `TaskSystemLog` | 1 | Core 0 | Affichage Serial Monitor |
+| `TaskCpuMonitor` | 1 | Core 0 | Estimation charge Core 0 / Core 1 |
+| `TaskLog` | 1 | Core 0 | Logs Serial Monitor |
+| Web async | callbacks | Core 0 | Serveur Web local |
 
-### Justification des priorités
+### Justification
 
-- `TaskSensors` a la priorité la plus haute car l’acquisition des mesures ne doit pas être bloquée par le réseau.
-- `TaskMQTT` est en priorité moyenne car la publication peut attendre quelques millisecondes.
-- `TaskSupervision` surveille les alertes et l’état système.
-- `TaskWeb`, `TaskWiFi`, les logs et les effets lumineux sont moins prioritaires.
-- Les tâches réseau sont plutôt sur le Core 0.
-- Les tâches capteurs/actionneurs sont plutôt sur le Core 1.
+- Les capteurs et actionneurs sont sur le **Core 1**.
+- Le réseau, MQTT, LittleFS et Web sont sur le **Core 0**.
+- `TaskSensors` a la priorité la plus haute car l’acquisition ne doit pas dépendre du réseau.
+- `TaskMQTT` est prioritaire mais moins critique que les capteurs.
+- La Queue découple les mesures du réseau.
+
+---
+
+## Correction LEDC buzzer
+
+Une erreur pouvait apparaître dans le moniteur série :
+
+```text
+E ledc: ledc_set_duty(...) LEDC is not initialized
+```
+
+La version finale corrige ce problème en initialisant le buzzer avec LEDC :
+
+```cpp
+ledcSetup(BUZZER_ALARM_CH, 2000, 8);
+ledcAttachPin(BUZZER_ALARM_PIN, BUZZER_ALARM_CH);
+ledcWrite(BUZZER_ALARM_CH, 0);
+```
+
+Le buzzer est ensuite contrôlé proprement avec :
+
+```cpp
+ledcWriteTone(BUZZER_ALARM_CH, 900);
+ledcWriteTone(BUZZER_ALARM_CH, 0);
+```
+
+---
+
+## Radar HC-SR04
+
+Le capteur HC-SR04 mesure la distance d’un obstacle.
+
+### Branchement
+
+```text
+HC-SR04 VCC  → 3V3
+HC-SR04 GND  → GND
+HC-SR04 TRIG → GPIO14
+HC-SR04 ECHO → GPIO26
+```
+
+### Fonctionnement
+
+Le radar déclenche une détection si :
+
+```text
+distance <= seuil radar
+```
+
+Le seuil par défaut est :
+
+```text
+80 cm
+```
+
+Il peut être modifié dans l’onglet **Réglages**.
+
+### Radar multi-échos récents
+
+Un seul HC-SR04 fixe ne peut pas détecter réellement plusieurs objets en même temps. Il renvoie principalement un seul écho de distance.
+
+Pour la démonstration, l’interface Web affiche plusieurs **échos récents** :
+
+- chaque nouvelle distance détectée est mémorisée ;
+- les derniers échos restent affichés sur le radar ;
+- cela donne un effet radar plus visuel ;
+- les échos peuvent être effacés avec le bouton **Effacer échos**.
 
 ---
 
 ## MQTT et Node-RED
 
-### Broker MQTT utilisé
+### Broker
 
 ```text
 test.mosquitto.org
@@ -301,30 +357,33 @@ Port : 1883
 
 | Type | Topic |
 |---|---|
-| Publication données | `campus/groupe1/ESP32-Othmane/data` |
-| Réception commandes | `campus/groupe1/ESP32-Othmane/cmd` |
+| Données | `campus/groupe1/ESP32-Othmane/data` |
+| Commandes | `campus/groupe1/ESP32-Othmane/cmd` |
 
 ### Exemple de message publié
 
 ```json
 {
   "device": "ESP32-Othmane",
+  "seq": 12,
+  "createdMs": 18500,
   "temp": 24.8,
   "humidity": 55.2,
-  "gasRaw": 820,
-  "gasPercent": 20.0,
-  "pir": false,
+  "dhtOk": true,
+  "gasRaw": 830,
+  "gasPercent": 20.2,
+  "distanceCm": 42.5,
+  "radarObject": true,
+  "radarOk": true,
   "hw499": false,
-  "riskScore": 0,
-  "riskState": "NOMINAL",
   "wifi": true,
-  "mqttConnected": true,
-  "heap": 198000,
-  "uptime": 125
+  "riskScore": 45,
+  "riskState": "ATTENTION",
+  "replayed": false
 }
 ```
 
-### Commandes MQTT possibles
+### Commandes MQTT
 
 Publier sur :
 
@@ -332,49 +391,25 @@ Publier sur :
 campus/groupe1/ESP32-Othmane/cmd
 ```
 
-Commandes :
+Commandes utiles :
 
 ```text
 securityOn
 securityOff
-nightOn
-nightOff
-ecoOn
-ecoOff
 ack
-light:party
-light:cyber
-light:scanner
-music:robot
-music:laugh
-demo:all
-demo:motion
 ```
 
 ---
 
 ## Node-RED
 
-### Installation rapide
-
-```bash
-npm install -g --unsafe-perm node-red
-node-red
-```
-
-Puis ouvrir :
-
-```text
-http://localhost:1880
-```
-
-### Flow minimal
+Flow minimal :
 
 ```text
 mqtt in → json → debug
 ```
 
-Configuration du node `mqtt in` :
+Configuration :
 
 ```text
 Server : test.mosquitto.org
@@ -383,15 +418,15 @@ Topic  : campus/groupe1/ESP32-Othmane/data
 QoS    : 0
 ```
 
-### Flow recommandé
+Flow recommandé :
 
 ```mermaid
 flowchart LR
-    MQTTIN["mqtt in<br/>campus/groupe1/ESP32-Othmane/data"]
+    MQTTIN["mqtt in"]
     JSON["json"]
     DEBUG["debug"]
-    DASH["dashboard gauges/charts"]
-    DB["Base NoSQL<br/>MongoDB / InfluxDB / autre"]
+    DASH["dashboard"]
+    DB["Base NoSQL"]
 
     MQTTIN --> JSON
     JSON --> DEBUG
@@ -403,65 +438,93 @@ flowchart LR
 
 ## Mode offline et replay
 
-La station continue à lire les capteurs même si le réseau tombe.
+Si MQTT ou le réseau tombe, la station continue à lire les capteurs.
 
-### Cas 1 : panne MQTT
+### Fonctionnement
 
-- Le WiFi reste actif.
-- Le site Web reste accessible.
-- Les mesures continuent à être lues.
-- MQTT ne publie plus.
-- Les mesures sont stockées localement.
-- Quand MQTT revient, les mesures sont rejouées.
-
-### Cas 2 : panne WiFi
-
-- Le site Web n’est plus accessible pendant la panne.
-- Les tâches FreeRTOS continuent de tourner.
-- Les mesures sont conservées dans LittleFS.
-- À la reconnexion, MQTT reprend.
-- Les données offline sont rejouées.
-
-```mermaid
-sequenceDiagram
-    participant Sensors as TaskSensors
-    participant Queue as Queue
-    participant MQTT as TaskMQTT
-    participant FS as LittleFS
-    participant Broker as Broker MQTT
-
-    Sensors->>Queue: SensorPacket
-    Queue->>MQTT: paquet mesure
-    alt MQTT connecté
-        MQTT->>Broker: publish JSON
-    else MQTT/WiFi indisponible
-        MQTT->>FS: append offline.jsonl
-    end
-
-    Note over MQTT,FS: Quand MQTT revient
-    FS->>MQTT: lecture offline.jsonl
-    MQTT->>Broker: replay des données
+```text
+TaskSensors
+→ Queue
+→ TaskMQTT
+→ si MQTT OK : publication
+→ si MQTT KO : stockage LittleFS
+→ quand MQTT revient : replay
 ```
 
----
-
-## Base de données locale
-
-La base locale utilise LittleFS.
+### Fichiers LittleFS
 
 | Fichier | Rôle |
 |---|---|
-| `/offline.jsonl` | Mesures en attente de replay MQTT |
-| `/history.jsonl` | Historique des mesures pour les graphiques |
-| `/events.jsonl` ou buffer RAM | Historique des événements système |
+| `/offline.jsonl` | Données non publiées à rejouer |
+| `/history.jsonl` | Historique local pour les graphes |
 
-Chaque ligne est un JSON indépendant :
+### Démonstration
 
-```json
-{"ts":12345,"temp":24.8,"humidity":55.2,"gasRaw":820,"wifi":true,"mqtt":false}
+Dans l’interface Web :
+
+- **Panne MQTT 5 min** : simule une panne MQTT sans couper le site ;
+- les mesures continuent ;
+- les données sont stockées offline ;
+- quand MQTT revient, elles sont rejouées.
+
+---
+
+## Interface Web
+
+La version finale utilise une interface simple pour éviter les latences.
+
+### Onglets
+
+| Onglet | Rôle |
+|---|---|
+| Dashboard | Mesures principales et état système |
+| Radar | Radar HC-SR04 avec échos récents |
+| Graphiques | Graphiques séparés par mesure |
+| Commandes | LEDs, sécurité, MQTT, démos |
+| Jeux | Snake, Collecteur, Dodge |
+| Système | CPU, heap, WiFi, MQTT, offline |
+| Réglages | Seuils et topic MQTT |
+
+### Graphiques
+
+Chaque mesure a son propre graphique :
+
+| Graphique | Axe X | Axe Y |
+|---|---|---|
+| Température | Heure | °C |
+| Humidité | Heure | % |
+| Gaz | Heure | % |
+| Distance | Heure | cm |
+| Risque | Heure | % |
+| CPU | Heure | % Core 0 / Core 1 |
+
+Les graphes utilisent `canvas`, sans bibliothèque externe, pour limiter la charge.
+
+---
+
+## Jeux joystick
+
+L’onglet **Jeux** contient :
+
+| Jeu | Objectif |
+|---|---|
+| Snake | Manger la cible sans toucher les murs |
+| Collecteur | Attraper les points |
+| Dodge | Éviter les obstacles |
+
+Contrôles :
+
+```text
+Joystick HW-504
+ou
+flèches du clavier
 ```
 
-Le format JSONL est simple à écrire, simple à lire et robuste pour un petit système embarqué.
+Bouton joystick ou barre espace :
+
+```text
+recommencer la partie
+```
 
 ---
 
@@ -476,7 +539,7 @@ Utilisateur : admin
 Mot de passe : esp32
 ```
 
-Ces valeurs peuvent être changées dans le code :
+Dans le code :
 
 ```cpp
 const char* WEB_USER = "admin";
@@ -491,94 +554,21 @@ Les commandes sensibles utilisent un token :
 const char* API_TOKEN = "1234";
 ```
 
-Le site envoie ce token automatiquement pour les actions sensibles.
-
----
-
-## Interface Web
-
-Pages disponibles :
-
-| Page | Contenu |
-|---|---|
-| Dashboard | Mesures live, état global, risque |
-| Graphiques | Température, humidité, gaz, timeline |
-| Supervision CPU | Cœurs ESP32, heap, queues, latence |
-| BDD / Offline | Fichiers LittleFS, offline, replay |
-| Jeux joystick | Snake, Collecteur, Dodge |
-| Réglages | MQTT, WiFi test, sécurité, seuils |
-
-L’interface utilise Chart.js pour les graphiques.
-
----
-
-## Jeux joystick HW-504
-
-La page jeux contient plusieurs jeux simples :
-
-| Jeu | Contrôle |
-|---|---|
-| Snake | Joystick ou flèches clavier |
-| Collecteur | Joystick ou flèches clavier |
-| Dodge | Joystick ou flèches clavier |
-
-Le bouton du joystick sert à relancer / valider.
-
-### Branchement joystick
-
-```text
-HW-504 VCC → 3V3
-HW-504 GND → GND
-HW-504 VRX → GPIO32
-HW-504 VRY → GPIO35
-HW-504 SW  → GPIO23
-```
-
-API associée :
-
-```text
-/api/joystick
-```
-
-Exemple :
-
-```json
-{
-  "xRaw": 2048,
-  "yRaw": 2048,
-  "x": 0,
-  "y": 0,
-  "button": false,
-  "buttonCount": 0,
-  "direction": "CENTER"
-}
-```
-
 ---
 
 ## Installation PlatformIO
 
-### 1. Cloner le projet
-
-```bash
-git clone <url-du-repo>
-cd <nom-du-repo>
-```
-
-### 2. Structure attendue
+### Structure attendue
 
 ```text
 .
 ├── platformio.ini
-├── README.md
 └── src
     ├── main.cpp
     └── index.cpp
 ```
 
-### 3. Dépendances
-
-Dans `platformio.ini` :
+### Dépendances
 
 ```ini
 [env:esp32doit-devkit-v1]
@@ -595,7 +585,7 @@ lib_deps =
     knolleary/PubSubClient
 ```
 
-### 4. Configurer le WiFi
+### WiFi
 
 Dans `main.cpp`, modifier :
 
@@ -604,14 +594,14 @@ const char* ssid = "NOM_WIFI";
 const char* password = "MOT_DE_PASSE_WIFI";
 ```
 
-### 5. Compiler et envoyer
+### Compilation
 
 ```bash
 pio run -t clean
 pio run -t upload
 ```
 
-### 6. Ouvrir le Serial Monitor
+### Serial Monitor
 
 ```bash
 pio device monitor
@@ -623,56 +613,62 @@ Vitesse :
 115200
 ```
 
-L’adresse IP de l’ESP32 apparaît dans le moniteur série.
-
 ---
 
 ## Tests recommandés
 
-### Test 1 : capteurs
+### Test capteurs
 
-- Ouvrir le dashboard.
-- Vérifier température/humidité.
-- Vérifier gaz brut.
-- Bouger devant le PIR.
-- Activer HW-499.
+- Vérifier la température.
+- Vérifier l’humidité.
+- Vérifier la valeur gaz.
+- Approcher la main devant le HC-SR04.
+- Vérifier HW-499.
 - Bouger le joystick.
 
-### Test 2 : MQTT
+### Test radar
+
+- Aller dans l’onglet **Radar**.
+- Approcher la main à différentes distances.
+- Vérifier les échos récents.
+- Cliquer sur **Effacer échos**.
+
+### Test sécurité
+
+- Cliquer sur **Sécurité ON**.
+- Approcher la main à moins du seuil radar.
+- Vérifier LED rouge + buzzer + intrusion.
+- Cliquer sur **Acquitter**.
+
+### Test MQTT
 
 - Ouvrir Node-RED.
 - Configurer `mqtt in`.
-- Cliquer sur `Sauver + MQTT ON`.
-- Vérifier les messages JSON dans Node-RED.
+- Cliquer sur **MQTT ON**.
+- Vérifier les JSON dans le debug Node-RED.
 
-### Test 3 : panne MQTT
+### Test panne MQTT
 
-- Cliquer sur `Panne MQTT 5 min`.
-- Vérifier que la station continue à mesurer.
-- Vérifier que la base locale augmente.
-- Attendre le retour MQTT.
+- Cliquer sur **Panne MQTT 5 min**.
+- Vérifier que les mesures continuent.
+- Vérifier que l’offline augmente.
+- Stopper la panne ou attendre.
 - Vérifier le replay.
 
-### Test 4 : panne WiFi
+### Test LEDs
 
-- Cliquer sur `Couper WiFi 1 min`.
-- Le site devient inaccessible.
-- La station continue à mesurer.
-- Après reconnexion, l’historique affiche les mesures.
+- Passer en mode manuel.
+- Tester chaque LED.
+- Lancer **Démo lumières**.
+- Repasser en mode auto.
 
-### Test 5 : panne capteur
+### Test jeux
 
-- Débrancher le DHT22.
-- Vérifier que le dashboard affiche une erreur capteur.
-- Rebrancher le DHT22.
-- Vérifier le retour à l’état normal.
-
-### Test 6 : sécurité PIR
-
-- Activer le mode sécurité.
-- Passer devant le PIR.
-- Vérifier alarme + intrusion.
-- Cliquer sur `Acquitter`.
+- Aller dans l’onglet **Jeux**.
+- Tester Snake.
+- Tester Collecteur.
+- Tester Dodge.
+- Contrôler avec joystick ou clavier.
 
 ---
 
@@ -680,91 +676,89 @@ L’adresse IP de l’ESP32 apparaît dans le moniteur série.
 
 ### Le site ne s’ouvre pas
 
-- Vérifier le Serial Monitor.
-- Vérifier l’IP affichée.
+- Vérifier l’IP dans le Serial Monitor.
 - Vérifier que le PC/téléphone est sur le même réseau.
-- Si le WiFi a été coupé depuis le site, attendre la fin de la coupure.
+- Vérifier login : `admin / esp32`.
 
-### MQTT reste OFF
+### MQTT ne publie pas
 
-- Cliquer sur `Sauver + MQTT ON`.
-- Vérifier le broker `test.mosquitto.org`.
-- Vérifier le topic Node-RED.
-- Vérifier que le WiFi de l’ESP32 est connecté.
+- Cliquer sur **MQTT ON**.
+- Vérifier Node-RED :
+  - broker : `test.mosquitto.org`
+  - port : `1883`
+  - topic : `campus/groupe1/ESP32-Othmane/data`
 
-### Node-RED ne reçoit rien
+### HC-SR04 sans écho
 
-Vérifier :
-
-```text
-Server : test.mosquitto.org
-Port   : 1883
-Topic  : campus/groupe1/ESP32-Othmane/data
-```
+- Vérifier TRIG sur GPIO14.
+- Vérifier ECHO sur GPIO26.
+- Vérifier GND commun.
+- Si le module ne fonctionne pas en 3V3, utiliser un HC-SR04P compatible 3V3.
 
 ### DHT22 en erreur
 
 - Vérifier DATA sur GPIO4.
-- Vérifier VCC 3V3.
-- Vérifier GND commun.
-- Attendre 2 secondes entre les lectures.
+- Vérifier VCC 3V3 et GND.
+- Attendre quelques secondes après démarrage.
 
-### PIR toujours actif
+### Gaz incohérent
 
-- Attendre la stabilisation du PIR.
-- Régler les potentiomètres du module.
-- Vérifier OUT sur GPIO26.
-
-### MQ gaz incohérent
-
-- Les capteurs MQ doivent chauffer avant stabilisation.
+- Les capteurs MQ nécessitent un temps de chauffe.
 - Vérifier AO sur GPIO34.
-- Vérifier l’alimentation 3V3.
-- Utiliser le bouton `Calibrer gaz`.
+- Vérifier GND commun.
+
+### LEDC erreur buzzer
+
+La version finale initialise LEDC proprement.  
+Si l’erreur revient, vérifier que le bon `main.cpp` est bien utilisé.
 
 ### ESP32 ne démarre pas
 
-- Débrancher le buzzer sur GPIO12.
-- Si le problème disparaît, déplacer ce buzzer sur un autre GPIO et modifier le code.
+GPIO12 peut poser problème sur certains montages car c’est une broche de boot.  
+Si besoin, déplacer le buzzer alarme sur un autre GPIO et modifier :
+
+```cpp
+const int BUZZER_ALARM_PIN = 12;
+```
 
 ---
 
-## Ce qu’il faut expliquer à la soutenance
+## À expliquer à la soutenance
 
 ### Rôle des tâches
 
-- `TaskSensors` lit les capteurs et crée des paquets de mesure.
-- `TaskMQTT` publie les mesures et gère offline/replay.
-- `TaskWeb` expose l’interface locale.
-- `TaskSupervision` vérifie l’état global, les alertes et la santé système.
+- `TaskSensors` lit les capteurs et crée un `SensorPacket`.
+- `TaskMQTT` récupère les paquets dans la Queue et publie en MQTT.
+- `TaskActuators` gère LEDs et buzzer.
+- `TaskWiFi` reconnecte le WiFi.
+- `TaskCpuMonitor` supervise Core 0 et Core 1.
 
 ### Pourquoi une Queue ?
 
-La Queue découple l’acquisition capteur de la publication réseau.
+La Queue sépare les capteurs du réseau.
 
-Si MQTT est lent ou indisponible, les capteurs continuent à travailler. Cela évite de perdre des mesures et évite de bloquer l’acquisition.
+Si MQTT ralentit ou tombe, `TaskSensors` continue à fonctionner.  
+Les données sont stockées localement puis rejouées.
 
 ### Pourquoi un Mutex ?
 
-Le mutex protège uniquement les ressources partagées :
+Le mutex protège les variables partagées entre :
 
-- mesures affichées par le Web ;
-- état système ;
-- historique événements ;
-- compteurs de supervision.
+- capteurs ;
+- serveur Web ;
+- MQTT ;
+- actionneurs.
 
-### Que se passe-t-il si le WiFi tombe ?
+### Que se passe-t-il si MQTT tombe ?
 
-- La station continue à lire les capteurs.
-- Les données sont stockées localement.
-- Le site Web devient inaccessible pendant la coupure WiFi.
-- Quand le WiFi revient, MQTT se reconnecte.
-- Les données stockées sont rejouées.
+- Les capteurs continuent.
+- Les mesures sont écrites dans `/offline.jsonl`.
+- Quand MQTT revient, `TaskMQTT` rejoue les données.
 
-### Trajet complet d’une mesure
+### Trajet d’une mesure
 
 ```text
-DHT22
+DHT22 / HC-SR04 / MQ
 → TaskSensors
 → SensorPacket
 → Queue FreeRTOS
@@ -774,17 +768,27 @@ DHT22
 → Dashboard / Base NoSQL
 ```
 
-### Limites actuelles
+### Limites
 
-- La base locale LittleFS reste limitée par la mémoire flash disponible.
-- L’heure exacte vient du navigateur ou de l’uptime ESP32, pas d’un module RTC.
-- MQTT public `test.mosquitto.org` est pratique pour la démo, mais un broker privé serait préférable en production.
-- Les identifiants Web doivent être changés avant un vrai déploiement.
+- Un HC-SR04 fixe ne détecte pas réellement plusieurs objets simultanément.
+- Le radar multi-échos affiche les dernières détections pour la visualisation.
+- LittleFS est limité par la mémoire flash.
+- `test.mosquitto.org` est pratique pour la démo mais pas idéal en production.
+- Les identifiants Web doivent être changés pour un vrai déploiement.
 
 ---
 
-## Auteur
+## Auteurs
 
-Projet réalisé par **Othmane Baltache**.
+Projet réalisé par :
 
-Master Informatique — Mission IoT ESP32 / FreeRTOS / MQTT / Node-RED.
+- **BALTACHE Othmane**
+- **BOUBAKER Oussema**
+- **MIVELLE Erwan**
+
+Encadrement / référence :
+
+- **Gérard De Viala**
+
+Master Informatique — ESGI  
+Projet IoT ESP32 / FreeRTOS / MQTT / Node-RED.
