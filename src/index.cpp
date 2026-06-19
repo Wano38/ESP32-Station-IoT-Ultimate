@@ -341,6 +341,8 @@ extern const char index_html[] PROGMEM = R"rawliteral(
           <tr><td>Détections radar</td><td id="radarCountVal">--</td></tr>
           <tr><td>HW-499</td><td id="hwVal">--</td></tr>
           <tr><td>Joystick</td><td id="joyVal">--</td></tr>
+          <tr><td>Mélodie</td><td id="melodyDemoVal">--</td></tr>
+          <tr><td>Interruption critique</td><td id="criticalVal">--</td></tr>
         </table>
       </div>
 
@@ -437,6 +439,10 @@ extern const char index_html[] PROGMEM = R"rawliteral(
           <button class="orange" data-action="ack">Acquitter</button>
           <button class="green" data-action="soundOn">Son ON</button>
           <button class="secondary" data-action="soundOff">Son OFF</button>
+          <button class="purple" data-action="melodyDemo">Mélodie 2 buzzers</button>
+          <button class="secondary" data-action="melodyStop">Stop mélodie</button>
+          <button class="red" data-action="criticalOn">Interruption critique ON</button>
+          <button class="secondary" data-action="criticalOff">Interruption critique OFF</button>
         </div>
       </div>
 
@@ -497,6 +503,7 @@ extern const char index_html[] PROGMEM = R"rawliteral(
           <tr><td>Loops actuators</td><td id="loopsActuatorsVal">--</td></tr>
           <tr><td>Loops MQTT</td><td id="loopsMqttVal">--</td></tr>
           <tr><td>Loops WiFi</td><td id="loopsWiFiVal">--</td></tr>
+          <tr><td>Loops interruption</td><td id="loopsCriticalVal">--</td></tr>
         </table>
       </div>
 
@@ -512,6 +519,8 @@ extern const char index_html[] PROGMEM = R"rawliteral(
           <tr><td>Latence MQTT</td><td id="latencyVal">--</td></tr>
           <tr><td>Offline</td><td id="offlineVal">--</td></tr>
           <tr><td>Replayed</td><td id="replayedVal">--</td></tr>
+          <tr><td>Mélodie buzzers</td><td id="melodySystemVal">--</td></tr>
+          <tr><td>Interruption critique</td><td id="criticalSystemVal">--</td></tr>
         </table>
         <div class="controls">
           <button class="red" data-action="clearDb">Vider BDD locale</button>
@@ -758,6 +767,8 @@ extern const char index_html[] PROGMEM = R"rawliteral(
     set("radarCountVal", d.radarDetectCount);
     set("hwVal", d.hw499 ? "Actif" : "RAS");
     set("joyVal", d.joyDirection || "--");
+    set("melodyDemoVal", d.melodyDemo ? "Active" : "OFF");
+    set("criticalVal", d.criticalInterrupt ? "ACTIVE" : "OFF");
 
     set("radarDist", d.distanceCm < 0 ? "--" : d.distanceCm.toFixed(1) + " cm");
     set("radarLimitText", d.radarLimit.toFixed(1) + " cm");
@@ -777,6 +788,7 @@ extern const char index_html[] PROGMEM = R"rawliteral(
     set("loopsActuatorsVal", d.loopsActuators);
     set("loopsMqttVal", d.loopsMqtt);
     set("loopsWiFiVal", d.loopsWiFi);
+    set("loopsCriticalVal", d.loopsCritical || 0);
 
     set("ipVal", d.ip);
     set("rssiVal", d.rssi + " dBm");
@@ -787,6 +799,8 @@ extern const char index_html[] PROGMEM = R"rawliteral(
     set("latencyVal", d.mqttLatency + " ms");
     set("offlineVal", d.offlineCount);
     set("replayedVal", d.replayedCount);
+    set("melodySystemVal", d.melodyDemo ? "Active" : "OFF");
+    set("criticalSystemVal", d.criticalInterrupt ? "ACTIVE" : "OFF");
 
     set("joyDirVal", d.joyDirection || "--");
     set("joyXVal", d.joyX);
@@ -1237,6 +1251,8 @@ extern const char index_html[] PROGMEM = R"rawliteral(
   }
 
   async function demoReset(){
+    await action("criticalOff");
+    await action("melodyStop");
     await action("ack");
     await action("mqttFaultOff");
     await action("autoLeds");

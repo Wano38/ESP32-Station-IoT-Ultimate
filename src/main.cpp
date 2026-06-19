@@ -124,6 +124,14 @@ bool soundEnabled = true;
 bool securityEnabled = false;
 bool intrusionLatched = false;
 
+// Modes de démonstration
+// Melody : petite séquence sonore avec les deux buzzers.
+// Interruption critique : simule un incident industriel en forçant
+// température, humidité et gaz à des valeurs dangereuses + sirène police.
+bool melodyDemoActive = false;
+bool criticalInterruptActive = false;
+uint32_t melodyDemoUntilMs = 0;
+
 // =======================
 // Etat global partagé
 // =======================
@@ -236,6 +244,7 @@ uint32_t loopsSensors = 0;
 uint32_t loopsActuators = 0;
 uint32_t loopsMqtt = 0;
 uint32_t loopsWiFi = 0;
+uint32_t loopsCriticalInterrupt = 0;
 
 // =======================
 // LittleFS
@@ -495,21 +504,110 @@ void applyAutoLedsUnsafe() {
   applyManualLedsUnsafe();
 }
 
+void alarmToneOff() {
+  ledcWriteTone(BUZZER_ALARM_CH, 0);
+  ledcWrite(BUZZER_ALARM_CH, 0);
+  alarmToneActive = false;
+}
+
+void musicToneOff() {
+  ledcWriteTone(BUZZER_MUSIC_CH, 0);
+  ledcWrite(BUZZER_MUSIC_CH, 0);
+}
+
 void setAlarmTone(bool enabled) {
   if (enabled && !alarmToneActive) {
     ledcWriteTone(BUZZER_ALARM_CH, 900);
     ledcWrite(BUZZER_ALARM_CH, 128);
     alarmToneActive = true;
   } else if (!enabled && alarmToneActive) {
-    ledcWriteTone(BUZZER_ALARM_CH, 0);
-    ledcWrite(BUZZER_ALARM_CH, 0);
-    alarmToneActive = false;
+    alarmToneOff();
+  }
+}
+
+void playPoliceSirenStep() {
+  static bool toneFlip = false;
+  static uint32_t lastFlipMs = 0;
+
+  if (millis() - lastFlipMs >= 330) {
+    lastFlipMs = millis();
+    toneFlip = !toneFlip;
+  }
+
+  if (toneFlip) {
+    ledcWriteTone(BUZZER_ALARM_CH, 880);
+    ledcWrite(BUZZER_ALARM_CH, 128);
+    ledcWriteTone(BUZZER_MUSIC_CH, 660);
+    ledcWrite(BUZZER_MUSIC_CH, 120);
+  } else {
+    ledcWriteTone(BUZZER_ALARM_CH, 660);
+    ledcWrite(BUZZER_ALARM_CH, 128);
+    ledcWriteTone(BUZZER_MUSIC_CH, 880);
+    ledcWrite(BUZZER_MUSIC_CH, 120);
+  }
+}
+
+void playMelodyStep() {
+  // Petite mélodie non bloquante avec deux buzzers.
+  // Buzzer alarme = note principale, buzzer musique = harmonique.
+  const int notesA[] = {523, 659, 784, 1046, 784, 659, 523, 0};
+  const int notesB[] = {392, 494, 587, 784, 587, 494, 392, 0};
+  const int count = 8;
+
+  static uint32_t lastStepMs = 0;
+  static int step = 0;
+
+  if (millis() - lastStepMs >= 180) {
+    lastStepMs = millis();
+    step = (step + 1) % count;
+
+    int a = notesA[step];
+    int b = notesB[step];
+
+    if (a > 0) {
+      ledcWriteTone(BUZZER_ALARM_CH, a);
+      ledcWrite(BUZZER_ALARM_CH, 95);
+    } else {
+      ledcWriteTone(BUZZER_ALARM_CH, 0);
+      ledcWrite(BUZZER_ALARM_CH, 0);
+    }
+
+    if (b > 0) {
+      ledcWriteTone(BUZZER_MUSIC_CH, b);
+      ledcWrite(BUZZER_MUSIC_CH, 85);
+    } else {
+      ledcWriteTone(BUZZER_MUSIC_CH, 0);
+      ledcWrite(BUZZER_MUSIC_CH, 0);
+    }
   }
 }
 
 void updateBuzzerUnsafe() {
+  if (!soundEnabled) {
+    alarmToneOff();
+    musicToneOff();
+    return;
+  }
+
+  if (criticalInterruptActive) {
+    playPoliceSirenStep();
+    return;
+  }
+
+  if (melodyDemoActive) {
+    if (millis() < melodyDemoUntilMs) {
+      playMelodyStep();
+      return;
+    }
+
+    melodyDemoActive = false;
+    alarmToneOff();
+    musicToneOff();
+  }
+
   bool danger = state.riskScore >= 55 || state.intrusionLatched;
-  setAlarmTone(soundEnabled && danger);
+  setAlarmTone(danger);
+  musicToneOff();
 }
 
 // =====================================================
@@ -717,6 +815,7 @@ String buildLiveJson() {
   json += "\"loopsActuators\":" + String(loopsActuators) + ",";
   json += "\"loopsMqtt\":" + String(loopsMqtt) + ",";
   json += "\"loopsWiFi\":" + String(loopsWiFi) + ",";
+  json += "\"loopsCritical\":" + String(loopsCriticalInterrupt) + ",";
   json += "\"joyX\":" + String(state.joyX) + ",";
   json += "\"joyY\":" + String(state.joyY) + ",";
   json += "\"joyButton\":" + boolJson(state.joyButton) + ",";
@@ -805,12 +904,20 @@ void setupWebServer() {
     } else if (cmd == "securityOff") {
       securityEnabled = false;
       intrusionLatched = false;
+      criticalInterruptActive = false;
+      melodyDemoActive = false;
       state.securityEnabled = false;
       state.intrusionLatched = false;
+      alarmToneOff();
+      musicToneOff();
       addEvent("SECURITE", "INFO", "Mode sécurité désactivé");
     } else if (cmd == "ack") {
+      criticalInterruptActive = false;
+      melodyDemoActive = false;
       intrusionLatched = false;
       state.intrusionLatched = false;
+      alarmToneOff();
+      musicToneOff();
       addEvent("ALARME", "INFO", "Alarme acquittée");
     } else if (cmd == "autoLeds") {
       manualLedMode = false;
@@ -830,9 +937,39 @@ void setupWebServer() {
     } else if (cmd == "soundOn") {
       soundEnabled = true;
       addEvent("SON", "INFO", "Son activé");
+    } else if (cmd == "melodyDemo") {
+      soundEnabled = true;
+      criticalInterruptActive = false;
+      melodyDemoActive = true;
+      melodyDemoUntilMs = millis() + 9000UL;
+      addEvent("SON", "INFO", "Mélodie deux buzzers lancée");
+    } else if (cmd == "melodyStop") {
+      melodyDemoActive = false;
+      alarmToneOff();
+      musicToneOff();
+      addEvent("SON", "INFO", "Mélodie arrêtée");
+    } else if (cmd == "criticalOn") {
+      soundEnabled = true;
+      criticalInterruptActive = true;
+      melodyDemoActive = false;
+      securityEnabled = true;
+      intrusionLatched = true;
+      state.securityEnabled = true;
+      state.intrusionLatched = true;
+      addEvent("INTERRUPTION", "CRITIQUE", "Simulation critique activée");
+    } else if (cmd == "criticalOff") {
+      criticalInterruptActive = false;
+      intrusionLatched = false;
+      state.intrusionLatched = false;
+      alarmToneOff();
+      musicToneOff();
+      addEvent("INTERRUPTION", "INFO", "Simulation critique désactivée");
     } else if (cmd == "soundOff") {
       soundEnabled = false;
-      setAlarmTone(false);
+      melodyDemoActive = false;
+      criticalInterruptActive = false;
+      alarmToneOff();
+      musicToneOff();
       addEvent("SON", "INFO", "Son désactivé");
     } else if (cmd == "mqttOn") {
       mqttEnabled = true;
@@ -867,6 +1004,18 @@ void setupWebServer() {
       LittleFS.remove(HISTORY_FILE);
       offlineStoredCount = 0;
       addEvent("BDD", "WARNING", "Base locale vidée");
+    } else if (cmd == "criticalToggle") {
+      criticalInterruptActive = !criticalInterruptActive;
+      soundEnabled = true;
+      securityEnabled = criticalInterruptActive ? true : securityEnabled;
+      intrusionLatched = criticalInterruptActive ? true : false;
+      state.securityEnabled = securityEnabled;
+      state.intrusionLatched = intrusionLatched;
+      if (!criticalInterruptActive) {
+        alarmToneOff();
+        musicToneOff();
+      }
+      addEvent("INTERRUPTION", criticalInterruptActive ? "CRITIQUE" : "INFO", criticalInterruptActive ? "Interruption critique ON" : "Interruption critique OFF");
     } else if (cmd == "resetStats") {
       state.tempMin = NAN;
       state.tempMax = NAN;
@@ -928,6 +1077,47 @@ void setupWebServer() {
 // =====================================================
 // Tasks
 // =====================================================
+void taskCriticalInterrupt(void* parameter) {
+  // Tâche dédiée au mode interruption critique.
+  // Elle ne tourne réellement que quand criticalInterruptActive = true.
+  // Rôle : forcer les valeurs affichées et maintenir l'état critique
+  // pour la démonstration sans modifier le câblage réel.
+  for (;;) {
+    uint32_t start = micros();
+
+    if (criticalInterruptActive) {
+      xSemaphoreTake(stateMutex, portMAX_DELAY);
+
+      state.temp = 99.9;
+      state.humidity = 100.0;
+      state.dhtOk = true;
+
+      state.gasRaw = 4095;
+      state.gasFiltered = 4095;
+      state.gasPercent = 100.0;
+      state.gasOk = true;
+
+      state.distanceCm = 20.0;
+      state.radarOk = true;
+      state.radarObject = true;
+
+      state.hw499 = true;
+      state.securityEnabled = true;
+      state.intrusionLatched = true;
+
+      state.riskScore = 100;
+      state.riskState = "CRITIQUE";
+
+      xSemaphoreGive(stateMutex);
+    }
+
+    loopsCriticalInterrupt++;
+    recordBusy(1, start);
+
+    vTaskDelay(pdMS_TO_TICKS(120));
+  }
+}
+
 void taskSensors(void* parameter) {
   TickType_t lastWake = xTaskGetTickCount();
 
@@ -952,6 +1142,21 @@ void taskSensors(void* parameter) {
     bool hw = HW499_ACTIVE_LOW ? hwRaw == LOW : hwRaw == HIGH;
 
     bool buttonPressed = digitalRead(BUTTON_PIN) == LOW;
+
+    // Mode interruption critique :
+    // on simule un incident industriel en forçant les valeurs capteurs.
+    // Les vraies lectures physiques ne sont pas supprimées, elles sont juste remplacées
+    // pendant la démonstration.
+    if (criticalInterruptActive) {
+      temp = 99.9;
+      hum = 100.0;
+      dhtOk = true;
+      gasRawLocal = 4095;
+      distance = 20.0;
+      radarOk = true;
+      radarObject = true;
+      hw = true;
+    }
 
     xSemaphoreTake(stateMutex, portMAX_DELAY);
 
@@ -1253,6 +1458,7 @@ void setup() {
   // Core 1 : temps réel / capteurs / actionneurs
   xTaskCreatePinnedToCore(taskSensors, "TaskSensors", 4096, NULL, 3, NULL, 1);
   xTaskCreatePinnedToCore(taskActuators, "TaskActuators", 3072, NULL, 2, NULL, 1);
+  xTaskCreatePinnedToCore(taskCriticalInterrupt, "TaskCriticalInterrupt", 3072, NULL, 2, NULL, 1);
 
   // Core 0 : réseau / MQTT / Web / logs
   xTaskCreatePinnedToCore(taskMqtt, "TaskMQTT", 6144, NULL, 2, NULL, 0);
