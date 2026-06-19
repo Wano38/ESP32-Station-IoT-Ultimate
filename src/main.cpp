@@ -6,27 +6,25 @@
 #include <PubSubClient.h>
 #include <LittleFS.h>
 
-// Le HTML est compilé séparément dans src/index.cpp
+// Le HTML est dans src/index.cpp
 extern const char index_html[] PROGMEM;
 
 // =====================================================
-// STATION IoT ESP32 - VERSION OPTIMISÉE ESGI
-// Objectif : moins de latence, code plus lisible, supervision CPU,
-// graphiques plus légers côté navigateur.
-// =====================================================
-//
-// Points importants pour le sujet :
+// STATION IoT ESP32 - VERSION FONCTIONNELLE HC-SR04
+// -----------------------------------------------------
+// Objectifs :
+// - Plus fonctionnel que visuel
+// - FreeRTOS
 // - loop() vide
-// - aucune logique métier dans loop()
-// - FreeRTOS avec tâches séparées
-// - Queue entre TaskSensors et TaskMQTT
-// - Mutex seulement pour l'état partagé
-// - MQTT + mode offline/replay
-// - supervision heap, uptime, WiFi, MQTT, latence, charge Core 0/Core 1
+// - Queue capteurs -> MQTT
+// - Offline/replay LittleFS
+// - Supervision CPU
+// - Radar HC-SR04 à la place du PIR
+// - Boutons LEDs dans l'interface Web
 // =====================================================
 
 // =======================
-// Identifiants WiFi
+// WiFi
 // =======================
 const char* ssid = "iPhone de Othmane";
 const char* password = "othmane59";
@@ -34,11 +32,8 @@ const char* password = "othmane59";
 // =======================
 // Sécurité Web
 // =======================
-// Login de l'interface Web.
 const char* WEB_USER = "admin";
 const char* WEB_PASS = "esp32";
-
-// Token utilisé pour les commandes sensibles côté API.
 const char* API_TOKEN = "1234";
 
 // =======================
@@ -50,44 +45,48 @@ String mqttBaseTopic = "campus/groupe1/ESP32-Othmane";
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
+AsyncWebServer server(80);
 
 bool mqttEnabled = false;
 bool mqttConnected = false;
-
 unsigned long lastMqttReconnectAttemptMs = 0;
 unsigned long lastMqttPublishMs = 0;
 unsigned long lastMqttLatencyMs = 0;
+unsigned long mqttFaultUntilMs = 0;
 
 uint32_t mqttOkCount = 0;
 uint32_t mqttFailCount = 0;
 uint32_t offlineStoredCount = 0;
 uint32_t replayedCount = 0;
 
-// Permet de simuler une panne MQTT sans couper le WiFi.
-unsigned long mqttFaultUntilMs = 0;
-
-// Permet de couper volontairement le WiFi depuis le site.
-unsigned long wifiDisabledUntilMs = 0;
-
 // =======================
 // Capteurs
 // =======================
+// DHT22
 #define DHT_TYPE DHT22
 const int DHT_PIN = 4;
 DHT dht(DHT_PIN, DHT_TYPE);
 
-const int PIR_PIN = 26;
-const int HW499_PIN = 33;
+// Capteur gaz analogique
 const int GAS_AO_PIN = 34;
+
+// HW-499
+const int HW499_PIN = 33;
 const bool HW499_ACTIVE_LOW = true;
 
-// Bouton physique : une patte GPIO25, autre patte GND.
+// Bouton physique
 const int BUTTON_PIN = 25;
 
 // Joystick HW-504
 const int JOY_X_PIN = 32;
 const int JOY_Y_PIN = 35;
 const int JOY_SW_PIN = 23;
+
+// HC-SR04 : remplacement du PIR
+// On reprend l'ancien fil OUT du PIR sur GPIO26 pour ECHO.
+// Il faut ajouter un fil TRIG sur GPIO14.
+const int HCSR04_ECHO_PIN = 26;   // ancien GPIO PIR OUT
+const int HCSR04_TRIG_PIN = 14;   // nouveau fil TRIG
 
 // =======================
 // Actionneurs
@@ -112,19 +111,58 @@ float humLowLimit = 30.0;
 float humHighLimit = 75.0;
 int gasLimitRaw = 2500;
 
+// Radar : si distance <= seuil, objet détecté
+float radarLimitCm = 80.0;
+float radarMaxCm = 250.0;
+
 // =======================
-// Mesure partagée pour Web/Supervision
+// Modes
+// =======================
+bool manualLedMode = false;
+bool soundEnabled = true;
+bool securityEnabled = false;
+bool intrusionLatched = false;
+
+unsigned long wifiDisabledUntilMs = 0;
+
+// =======================
+// Etat partagé
 // =======================
 struct SharedState {
+  uint32_t seq = 0;
+
   float temp = NAN;
   float humidity = NAN;
+  bool dhtOk = false;
+
   int gasRaw = 0;
   float gasFiltered = -1;
   float gasPercent = 0;
+  bool gasOk = true;
 
-  bool pir = false;
   bool hw499 = false;
   bool buttonPressed = false;
+
+  float distanceCm = -1;
+  bool radarObject = false;
+  bool radarOk = false;
+  uint32_t radarDetectCount = 0;
+
+  bool securityEnabled = false;
+  bool intrusionLatched = false;
+
+  int riskScore = 0;
+  String riskState = "NORMAL";
+
+  uint32_t hw499Count = 0;
+  uint32_t intrusionCount = 0;
+
+  float tempMin = NAN;
+  float tempMax = NAN;
+  float humMin = NAN;
+  float humMax = NAN;
+  int gasMax = 0;
+  float distanceMin = NAN;
 
   int joyXRaw = 2048;
   int joyYRaw = 2048;
@@ -134,26 +172,11 @@ struct SharedState {
   uint32_t joyButtonCount = 0;
   String joyDirection = "CENTER";
 
-  bool dhtOk = false;
-  bool gasOk = true;
-
-  bool securityEnabled = false;
-  bool intrusionLatched = false;
-
-  int riskScore = 0;
-  String riskState = "NOMINAL";
-
-  uint32_t pirCount = 0;
-  uint32_t hw499Count = 0;
-  uint32_t intrusionCount = 0;
-
-  uint32_t sequence = 0;
-
-  float tempMin = NAN;
-  float tempMax = NAN;
-  float humMin = NAN;
-  float humMax = NAN;
-  int gasMax = 0;
+  bool ledRed = false;
+  bool ledBlue = false;
+  bool ledGreen = false;
+  bool ledYellow = false;
+  bool ledWhite = false;
 };
 
 SharedState state;
@@ -165,30 +188,38 @@ SemaphoreHandle_t stateMutex;
 struct SensorPacket {
   uint32_t seq;
   uint32_t uptimeMs;
+
   float temp;
   float humidity;
+  bool dhtOk;
+
   int gasRaw;
   float gasPercent;
-  bool pir;
+
+  float distanceCm;
+  bool radarObject;
+  bool radarOk;
+
   bool hw499;
-  bool dhtOk;
   bool wifiOk;
+
   int riskScore;
   char riskState[16];
 };
 
 QueueHandle_t sensorQueue;
+uint32_t queueDrops = 0;
 
 // =======================
-// Historique événement RAM
+// Historique événements RAM
 // =======================
-const int EVENT_COUNT = 16;
+const int EVENT_COUNT = 18;
 
 struct EventItem {
   uint32_t uptimeSec;
   char type[16];
   char level[16];
-  char message[72];
+  char message[90];
 };
 
 EventItem events[EVENT_COUNT];
@@ -198,10 +229,7 @@ int eventTotal = 0;
 // =======================
 // Supervision CPU estimée
 // =======================
-// On mesure le temps actif passé dans les tâches.
-// Cela donne une estimation suffisante pour la soutenance.
 portMUX_TYPE metricsMux = portMUX_INITIALIZER_UNLOCKED;
-
 volatile uint32_t core0BusyUs = 0;
 volatile uint32_t core1BusyUs = 0;
 
@@ -211,26 +239,25 @@ float core1Load = 0.0;
 uint32_t taskSensorsLoops = 0;
 uint32_t taskMqttLoops = 0;
 uint32_t taskSupervisionLoops = 0;
-uint32_t taskWebLoops = 0;
-uint32_t taskLightsLoops = 0;
 
-uint32_t queueDrops = 0;
-
+// =======================
+// Fichiers LittleFS
+// =======================
 const char* OFFLINE_FILE = "/offline.jsonl";
 const char* HISTORY_FILE = "/history.jsonl";
 const size_t MAX_HISTORY_BYTES = 70000;
 const size_t MAX_OFFLINE_BYTES = 70000;
 
 // =====================================================
-// Utilitaires basiques
+// Utilitaires
 // =====================================================
-String boolJson(bool value) {
-  return value ? "true" : "false";
+String boolJson(bool v) {
+  return v ? "true" : "false";
 }
 
-String floatJson(float value, int decimals = 1) {
-  if (isnan(value)) return "null";
-  return String(value, decimals);
+String floatJson(float v, int decimals = 1) {
+  if (isnan(v)) return "null";
+  return String(v, decimals);
 }
 
 String escapeJson(String s) {
@@ -241,28 +268,21 @@ String escapeJson(String s) {
   return s;
 }
 
-bool validToken(AsyncWebServerRequest* request) {
-  return request->hasParam("token") && request->getParam("token")->value() == API_TOKEN;
-}
-
 bool authenticated(AsyncWebServerRequest* request) {
   if (request->authenticate(WEB_USER, WEB_PASS)) return true;
-
   request->requestAuthentication();
   return false;
 }
 
+bool validToken(AsyncWebServerRequest* request) {
+  return request->hasParam("token") && request->getParam("token")->value() == API_TOKEN;
+}
+
 void recordBusy(uint8_t core, uint32_t startUs) {
   uint32_t elapsed = micros() - startUs;
-
   portENTER_CRITICAL(&metricsMux);
-
-  if (core == 0) {
-    core0BusyUs += elapsed;
-  } else {
-    core1BusyUs += elapsed;
-  }
-
+  if (core == 0) core0BusyUs += elapsed;
+  else core1BusyUs += elapsed;
   portEXIT_CRITICAL(&metricsMux);
 }
 
@@ -285,7 +305,7 @@ void addEvent(const char* type, const char* level, const char* message) {
 }
 
 // =====================================================
-// LittleFS : base locale
+// LittleFS
 // =====================================================
 void ensureFileLimit(const char* path, size_t maxBytes) {
   if (!LittleFS.exists(path)) return;
@@ -296,11 +316,9 @@ void ensureFileLimit(const char* path, size_t maxBytes) {
   size_t size = f.size();
   f.close();
 
-  // Version simple et robuste : si le fichier devient trop gros,
-  // on le purge. Pour un projet plus avancé, on ferait une rotation.
   if (size > maxBytes) {
     LittleFS.remove(path);
-    addEvent("BDD", "WARNING", "Fichier local purgé car trop volumineux");
+    addEvent("BDD", "WARNING", "Fichier local purgé");
   }
 }
 
@@ -312,27 +330,6 @@ void appendLine(const char* path, const String& line, size_t maxBytes) {
 
   f.println(line);
   f.close();
-}
-
-String packetToJson(const SensorPacket& p, bool replayed = false) {
-  String json = "{";
-  json += "\"device\":\"ESP32-Othmane\",";
-  json += "\"seq\":" + String(p.seq) + ",";
-  json += "\"createdMs\":" + String(p.uptimeMs) + ",";
-  json += "\"temp\":" + floatJson(p.temp, 1) + ",";
-  json += "\"humidity\":" + floatJson(p.humidity, 1) + ",";
-  json += "\"gasRaw\":" + String(p.gasRaw) + ",";
-  json += "\"gasPercent\":" + String(p.gasPercent, 1) + ",";
-  json += "\"pir\":" + boolJson(p.pir) + ",";
-  json += "\"hw499\":" + boolJson(p.hw499) + ",";
-  json += "\"dhtOk\":" + boolJson(p.dhtOk) + ",";
-  json += "\"wifi\":" + boolJson(p.wifiOk) + ",";
-  json += "\"riskScore\":" + String(p.riskScore) + ",";
-  json += "\"riskState\":\"" + String(p.riskState) + "\",";
-  json += "\"replayed\":" + boolJson(replayed);
-  json += "}";
-
-  return json;
 }
 
 String readTailJsonlAsArray(const char* path, int maxLines) {
@@ -372,50 +369,30 @@ String readTailJsonlAsArray(const char* path, int maxLines) {
 }
 
 // =====================================================
-// Alertes et risque
+// HC-SR04 radar
 // =====================================================
-int computeRisk(float temp, float hum, int gasRaw, bool pir, bool hw499, bool dhtOk) {
-  int risk = 0;
+float readDistanceCm() {
+  digitalWrite(HCSR04_TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(HCSR04_TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(HCSR04_TRIG_PIN, LOW);
 
-  if (!dhtOk) risk += 25;
-  if (dhtOk && temp >= tempLimit) risk += 25;
-  if (dhtOk && (hum < humLowLimit || hum > humHighLimit)) risk += 15;
-  if (gasRaw >= gasLimitRaw) risk += 35;
-  if (pir && state.securityEnabled) risk += 30;
-  else if (pir) risk += 10;
-  if (hw499) risk += 10;
-  if (WiFi.status() != WL_CONNECTED) risk += 10;
-  if (state.intrusionLatched) risk += 25;
+  // Timeout court pour ne pas bloquer la tâche.
+  unsigned long duration = pulseIn(HCSR04_ECHO_PIN, HIGH, 25000UL);
 
-  if (risk > 100) risk = 100;
-  return risk;
-}
+  if (duration == 0) return -1.0;
 
-const char* riskName(int score, bool dhtOk) {
-  if (!dhtOk) return "CAPTEUR";
-  if (score >= 80) return "CRITIQUE";
-  if (score >= 55) return "DANGER";
-  if (score >= 30) return "ATTENTION";
-  if (score >= 10) return "INFO";
-  return "NORMAL";
-}
+  // Distance cm = durée us / 58 environ
+  float distance = duration / 58.0;
 
-void updateMinMax(float temp, float hum, int gasRaw) {
-  if (!isnan(temp)) {
-    if (isnan(state.tempMin) || temp < state.tempMin) state.tempMin = temp;
-    if (isnan(state.tempMax) || temp > state.tempMax) state.tempMax = temp;
-  }
+  if (distance < 2 || distance > 400) return -1.0;
 
-  if (!isnan(hum)) {
-    if (isnan(state.humMin) || hum < state.humMin) state.humMin = hum;
-    if (isnan(state.humMax) || hum > state.humMax) state.humMax = hum;
-  }
-
-  if (gasRaw > state.gasMax) state.gasMax = gasRaw;
+  return distance;
 }
 
 // =====================================================
-// Joystick HW-504
+// Joystick
 // =====================================================
 void readJoystickUnsafe() {
   int xRaw = analogRead(JOY_X_PIN);
@@ -451,7 +428,7 @@ void readJoystickUnsafe() {
 }
 
 // =====================================================
-// LED / buzzer minimaliste pour réduire la charge
+// LEDs / buzzer
 // =====================================================
 void allLedsOff() {
   for (int i = 0; i < LED_COUNT; i++) {
@@ -459,29 +436,120 @@ void allLedsOff() {
   }
 }
 
-void applyLedsUnsafe() {
+void applyManualLedsUnsafe() {
+  digitalWrite(RED_LED, state.ledRed ? HIGH : LOW);
+  digitalWrite(BLUE_LED, state.ledBlue ? HIGH : LOW);
+  digitalWrite(GREEN_LED, state.ledGreen ? HIGH : LOW);
+  digitalWrite(YELLOW_LED, state.ledYellow ? HIGH : LOW);
+  digitalWrite(WHITE_LED, state.ledWhite ? HIGH : LOW);
+}
+
+void applyAutoLedsUnsafe() {
   bool wifiOk = WiFi.status() == WL_CONNECTED;
   bool danger = state.riskScore >= 55 || state.intrusionLatched;
   bool warning = state.riskScore >= 30 && !danger;
 
-  digitalWrite(GREEN_LED, wifiOk ? HIGH : LOW);
-  digitalWrite(RED_LED, danger ? HIGH : LOW);
-  digitalWrite(YELLOW_LED, warning ? HIGH : LOW);
-  digitalWrite(BLUE_LED, (!danger && !warning) ? HIGH : LOW);
-  digitalWrite(WHITE_LED, state.securityEnabled ? HIGH : LOW);
+  state.ledGreen = wifiOk;
+  state.ledRed = danger;
+  state.ledYellow = warning;
+  state.ledBlue = (!danger && !warning);
+  state.ledWhite = state.securityEnabled;
+
+  applyManualLedsUnsafe();
 }
 
 void alarmOn(bool enabled) {
-  if (enabled) {
-    tone(BUZZER_ALARM_PIN, 900);
-  } else {
+  if (!soundEnabled) {
     noTone(BUZZER_ALARM_PIN);
+    return;
+  }
+
+  if (enabled) tone(BUZZER_ALARM_PIN, 900);
+  else noTone(BUZZER_ALARM_PIN);
+}
+
+void playClick() {
+  if (!soundEnabled) return;
+  tone(BUZZER_MUSIC_PIN, 1500, 60);
+}
+
+// =====================================================
+// Risque
+// =====================================================
+int computeRisk(float temp, float hum, int gasRaw, float dist, bool radarObject, bool hw499, bool dhtOk) {
+  int risk = 0;
+
+  if (!dhtOk) risk += 25;
+  if (dhtOk && temp >= tempLimit) risk += 25;
+  if (dhtOk && (hum < humLowLimit || hum > humHighLimit)) risk += 15;
+  if (gasRaw >= gasLimitRaw) risk += 30;
+
+  if (securityEnabled && radarObject) risk += 35;
+  else if (radarObject) risk += 15;
+
+  if (hw499) risk += 10;
+  if (intrusionLatched) risk += 25;
+  if (WiFi.status() != WL_CONNECTED) risk += 10;
+
+  if (risk > 100) risk = 100;
+  return risk;
+}
+
+const char* riskName(int score, bool dhtOk) {
+  if (!dhtOk) return "CAPTEUR";
+  if (score >= 80) return "CRITIQUE";
+  if (score >= 55) return "DANGER";
+  if (score >= 30) return "ATTENTION";
+  if (score >= 10) return "INFO";
+  return "NORMAL";
+}
+
+void updateMinMax(float temp, float hum, int gasRaw, float distance) {
+  if (!isnan(temp)) {
+    if (isnan(state.tempMin) || temp < state.tempMin) state.tempMin = temp;
+    if (isnan(state.tempMax) || temp > state.tempMax) state.tempMax = temp;
+  }
+
+  if (!isnan(hum)) {
+    if (isnan(state.humMin) || hum < state.humMin) state.humMin = hum;
+    if (isnan(state.humMax) || hum > state.humMax) state.humMax = hum;
+  }
+
+  if (gasRaw > state.gasMax) state.gasMax = gasRaw;
+
+  if (distance > 0) {
+    if (isnan(state.distanceMin) || distance < state.distanceMin) {
+      state.distanceMin = distance;
+    }
   }
 }
 
 // =====================================================
 // MQTT
 // =====================================================
+String packetToJson(const SensorPacket& p, bool replayed = false) {
+  String json = "{";
+  json += "\"device\":\"ESP32-Othmane\",";
+  json += "\"seq\":" + String(p.seq) + ",";
+  json += "\"createdMs\":" + String(p.uptimeMs) + ",";
+  json += "\"temp\":" + floatJson(p.temp, 1) + ",";
+  json += "\"humidity\":" + floatJson(p.humidity, 1) + ",";
+  json += "\"dhtOk\":" + boolJson(p.dhtOk) + ",";
+  json += "\"gasRaw\":" + String(p.gasRaw) + ",";
+  json += "\"gasPercent\":" + String(p.gasPercent, 1) + ",";
+  json += "\"distanceCm\":" + floatJson(p.distanceCm, 1) + ",";
+  json += "\"radarObject\":" + boolJson(p.radarObject) + ",";
+  json += "\"radarOk\":" + boolJson(p.radarOk) + ",";
+  json += "\"hw499\":" + boolJson(p.hw499) + ",";
+  json += "\"wifi\":" + boolJson(p.wifiOk) + ",";
+  json += "\"riskScore\":" + String(p.riskScore) + ",";
+  json += "\"riskState\":\"" + String(p.riskState) + "\",";
+  json += "\"replayed\":" + boolJson(replayed);
+  json += "}";
+
+  return json;
+}
+
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String msg;
 
@@ -494,13 +562,17 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   xSemaphoreTake(stateMutex, portMAX_DELAY);
 
   if (msg == "securityOn") {
+    securityEnabled = true;
     state.securityEnabled = true;
     addEvent("MQTT", "INFO", "Sécurité activée via MQTT");
   } else if (msg == "securityOff") {
+    securityEnabled = false;
+    intrusionLatched = false;
     state.securityEnabled = false;
     state.intrusionLatched = false;
     addEvent("MQTT", "INFO", "Sécurité désactivée via MQTT");
   } else if (msg == "ack") {
+    intrusionLatched = false;
     state.intrusionLatched = false;
     addEvent("MQTT", "INFO", "Alarme acquittée via MQTT");
   }
@@ -584,8 +656,6 @@ void replayOfflineFile() {
 
   f.close();
 
-  // Version simple : si on a pu tout lire/envoyer, on supprime.
-  // Si la connexion retombe pendant le replay, on garde le fichier.
   if (allSent) {
     LittleFS.remove(OFFLINE_FILE);
     offlineStoredCount = 0;
@@ -612,25 +682,37 @@ String buildLiveJson() {
   json += "\"uptime\":" + String(millis() / 1000) + ",";
   json += "\"temp\":" + floatJson(state.temp, 1) + ",";
   json += "\"humidity\":" + floatJson(state.humidity, 1) + ",";
+  json += "\"dhtOk\":" + boolJson(state.dhtOk) + ",";
   json += "\"gasRaw\":" + String(state.gasRaw) + ",";
   json += "\"gasPercent\":" + String(state.gasPercent, 1) + ",";
-  json += "\"pir\":" + boolJson(state.pir) + ",";
-  json += "\"hw499\":" + boolJson(state.hw499) + ",";
-  json += "\"button\":" + boolJson(state.buttonPressed) + ",";
-  json += "\"dhtOk\":" + boolJson(state.dhtOk) + ",";
   json += "\"gasOk\":" + boolJson(state.gasOk) + ",";
-  json += "\"riskScore\":" + String(state.riskScore) + ",";
-  json += "\"riskState\":\"" + state.riskState + "\",";
+  json += "\"distanceCm\":" + floatJson(state.distanceCm, 1) + ",";
+  json += "\"radarObject\":" + boolJson(state.radarObject) + ",";
+  json += "\"radarOk\":" + boolJson(state.radarOk) + ",";
+  json += "\"radarDetectCount\":" + String(state.radarDetectCount) + ",";
+  json += "\"radarLimit\":" + String(radarLimitCm, 1) + ",";
+  json += "\"radarMax\":" + String(radarMaxCm, 1) + ",";
+  json += "\"hw499\":" + boolJson(state.hw499) + ",";
+  json += "\"hw499Count\":" + String(state.hw499Count) + ",";
+  json += "\"button\":" + boolJson(state.buttonPressed) + ",";
   json += "\"security\":" + boolJson(state.securityEnabled) + ",";
   json += "\"intrusion\":" + boolJson(state.intrusionLatched) + ",";
-  json += "\"pirCount\":" + String(state.pirCount) + ",";
-  json += "\"hw499Count\":" + String(state.hw499Count) + ",";
   json += "\"intrusionCount\":" + String(state.intrusionCount) + ",";
+  json += "\"riskScore\":" + String(state.riskScore) + ",";
+  json += "\"riskState\":\"" + state.riskState + "\",";
   json += "\"tempMin\":" + floatJson(state.tempMin, 1) + ",";
   json += "\"tempMax\":" + floatJson(state.tempMax, 1) + ",";
   json += "\"humMin\":" + floatJson(state.humMin, 1) + ",";
   json += "\"humMax\":" + floatJson(state.humMax, 1) + ",";
   json += "\"gasMax\":" + String(state.gasMax) + ",";
+  json += "\"distanceMin\":" + floatJson(state.distanceMin, 1) + ",";
+  json += "\"ledRed\":" + boolJson(state.ledRed) + ",";
+  json += "\"ledBlue\":" + boolJson(state.ledBlue) + ",";
+  json += "\"ledGreen\":" + boolJson(state.ledGreen) + ",";
+  json += "\"ledYellow\":" + boolJson(state.ledYellow) + ",";
+  json += "\"ledWhite\":" + boolJson(state.ledWhite) + ",";
+  json += "\"manualLedMode\":" + boolJson(manualLedMode) + ",";
+  json += "\"soundEnabled\":" + boolJson(soundEnabled) + ",";
   json += "\"wifi\":" + boolJson(wifiOk) + ",";
   json += "\"ip\":\"" + WiFi.localIP().toString() + "\",";
   json += "\"rssi\":" + String(WiFi.RSSI()) + ",";
@@ -649,9 +731,6 @@ String buildLiveJson() {
   json += "\"queueDrops\":" + String(queueDrops) + ",";
   json += "\"core0Load\":" + String(core0Load, 1) + ",";
   json += "\"core1Load\":" + String(core1Load, 1) + ",";
-  json += "\"loopsSensors\":" + String(taskSensorsLoops) + ",";
-  json += "\"loopsMqtt\":" + String(taskMqttLoops) + ",";
-  json += "\"loopsSupervision\":" + String(taskSupervisionLoops) + ",";
   json += "\"joyX\":" + String(state.joyX) + ",";
   json += "\"joyY\":" + String(state.joyY) + ",";
   json += "\"joyButton\":" + boolJson(state.joyButton) + ",";
@@ -720,49 +799,9 @@ void setupWebServer() {
     request->send(200, "application/json", readTailJsonlAsArray(HISTORY_FILE, limit));
   });
 
-  server.on("/api/joystick", HTTP_GET, [](AsyncWebServerRequest* request) {
-    if (!authenticated(request)) return;
-
-    xSemaphoreTake(stateMutex, portMAX_DELAY);
-
-    String json = "{";
-    json += "\"xRaw\":" + String(state.joyXRaw) + ",";
-    json += "\"yRaw\":" + String(state.joyYRaw) + ",";
-    json += "\"x\":" + String(state.joyX) + ",";
-    json += "\"y\":" + String(state.joyY) + ",";
-    json += "\"button\":" + boolJson(state.joyButton) + ",";
-    json += "\"buttonCount\":" + String(state.joyButtonCount) + ",";
-    json += "\"direction\":\"" + state.joyDirection + "\"";
-    json += "}";
-
-    xSemaphoreGive(stateMutex);
-
-    request->send(200, "application/json", json);
-  });
-
-  server.on("/api/config", HTTP_GET, [](AsyncWebServerRequest* request) {
-    if (!authenticated(request)) return;
-    if (!validToken(request)) {
-      request->send(403, "application/json", "{\"ok\":false,\"error\":\"bad token\"}");
-      return;
-    }
-
-    if (request->hasParam("tempLimit")) tempLimit = request->getParam("tempLimit")->value().toFloat();
-    if (request->hasParam("humLow")) humLowLimit = request->getParam("humLow")->value().toFloat();
-    if (request->hasParam("humHigh")) humHighLimit = request->getParam("humHigh")->value().toFloat();
-    if (request->hasParam("gasLimit")) gasLimitRaw = request->getParam("gasLimit")->value().toInt();
-    if (request->hasParam("mqtt")) mqttEnabled = request->getParam("mqtt")->value().toInt() == 1;
-    if (request->hasParam("mqttBase")) mqttBaseTopic = request->getParam("mqttBase")->value();
-
-    xSemaphoreTake(stateMutex, portMAX_DELAY);
-    addEvent("CONFIG", "INFO", "Configuration mise à jour");
-    xSemaphoreGive(stateMutex);
-
-    request->send(200, "application/json", "{\"ok\":true}");
-  });
-
   server.on("/api/action", HTTP_GET, [](AsyncWebServerRequest* request) {
     if (!authenticated(request)) return;
+
     if (!validToken(request)) {
       request->send(403, "application/json", "{\"ok\":false,\"error\":\"bad token\"}");
       return;
@@ -773,15 +812,45 @@ void setupWebServer() {
     xSemaphoreTake(stateMutex, portMAX_DELAY);
 
     if (cmd == "securityOn") {
+      securityEnabled = true;
       state.securityEnabled = true;
       addEvent("SECURITE", "INFO", "Mode sécurité activé");
+      playClick();
     } else if (cmd == "securityOff") {
+      securityEnabled = false;
+      intrusionLatched = false;
       state.securityEnabled = false;
       state.intrusionLatched = false;
       addEvent("SECURITE", "INFO", "Mode sécurité désactivé");
+      playClick();
     } else if (cmd == "ack") {
+      intrusionLatched = false;
       state.intrusionLatched = false;
       addEvent("ALARME", "INFO", "Alarme acquittée");
+      playClick();
+    } else if (cmd == "autoLeds") {
+      manualLedMode = false;
+      addEvent("LED", "INFO", "Mode LEDs automatique");
+    } else if (cmd == "manualLeds") {
+      manualLedMode = true;
+      addEvent("LED", "INFO", "Mode LEDs manuel");
+    } else if (cmd == "allLedsOff") {
+      manualLedMode = true;
+      state.ledRed = false;
+      state.ledBlue = false;
+      state.ledGreen = false;
+      state.ledYellow = false;
+      state.ledWhite = false;
+      applyManualLedsUnsafe();
+      addEvent("LED", "INFO", "Toutes les LEDs éteintes");
+    } else if (cmd == "soundOn") {
+      soundEnabled = true;
+      addEvent("SON", "INFO", "Son activé");
+    } else if (cmd == "soundOff") {
+      soundEnabled = false;
+      noTone(BUZZER_ALARM_PIN);
+      noTone(BUZZER_MUSIC_PIN);
+      addEvent("SON", "INFO", "Son désactivé");
     } else if (cmd == "mqttOn") {
       mqttEnabled = true;
       addEvent("MQTT", "INFO", "MQTT activé");
@@ -794,30 +863,9 @@ void setupWebServer() {
       mqttFaultUntilMs = millis() + 5UL * 60UL * 1000UL;
       mqttClient.disconnect();
       addEvent("MQTT", "WARNING", "Panne MQTT simulée 5 min");
-    } else if (cmd == "mqttFault30") {
-      mqttFaultUntilMs = millis() + 30UL * 60UL * 1000UL;
-      mqttClient.disconnect();
-      addEvent("MQTT", "WARNING", "Panne MQTT simulée 30 min");
-    } else if (cmd == "mqttFault60") {
-      mqttFaultUntilMs = millis() + 60UL * 60UL * 1000UL;
-      mqttClient.disconnect();
-      addEvent("MQTT", "WARNING", "Panne MQTT simulée 1 h");
     } else if (cmd == "mqttFaultOff") {
       mqttFaultUntilMs = 0;
       addEvent("MQTT", "INFO", "Simulation panne MQTT arrêtée");
-    } else if (cmd == "wifiOff60") {
-      wifiDisabledUntilMs = millis() + 60UL * 1000UL;
-      WiFi.disconnect(true);
-      addEvent("WIFI", "WARNING", "WiFi coupé 1 min");
-    } else if (cmd == "wifiOff30") {
-      wifiDisabledUntilMs = millis() + 30UL * 60UL * 1000UL;
-      WiFi.disconnect(true);
-      addEvent("WIFI", "WARNING", "WiFi coupé 30 min");
-    } else if (cmd == "wifiOn") {
-      wifiDisabledUntilMs = 0;
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(ssid, password);
-      addEvent("WIFI", "INFO", "Reconnexion WiFi demandée");
     } else if (cmd == "clearDb") {
       LittleFS.remove(OFFLINE_FILE);
       LittleFS.remove(HISTORY_FILE);
@@ -829,11 +877,25 @@ void setupWebServer() {
       state.humMin = NAN;
       state.humMax = NAN;
       state.gasMax = 0;
-      state.pirCount = 0;
+      state.distanceMin = NAN;
+      state.radarDetectCount = 0;
       state.hw499Count = 0;
       state.intrusionCount = 0;
       queueDrops = 0;
       addEvent("SYSTEME", "INFO", "Statistiques remises à zéro");
+    } else if (cmd == "led") {
+      manualLedMode = true;
+      String led = request->hasParam("led") ? request->getParam("led")->value() : "";
+      bool on = request->hasParam("on") ? request->getParam("on")->value().toInt() == 1 : false;
+
+      if (led == "red") state.ledRed = on;
+      else if (led == "blue") state.ledBlue = on;
+      else if (led == "green") state.ledGreen = on;
+      else if (led == "yellow") state.ledYellow = on;
+      else if (led == "white") state.ledWhite = on;
+
+      applyManualLedsUnsafe();
+      addEvent("LED", "INFO", "Commande LED manuelle");
     }
 
     xSemaphoreGive(stateMutex);
@@ -841,8 +903,27 @@ void setupWebServer() {
     request->send(200, "application/json", "{\"ok\":true}");
   });
 
-  server.onNotFound([](AsyncWebServerRequest* request) {
-    request->send(404, "text/plain", "Not found");
+  server.on("/api/config", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (!authenticated(request)) return;
+
+    if (!validToken(request)) {
+      request->send(403, "application/json", "{\"ok\":false,\"error\":\"bad token\"}");
+      return;
+    }
+
+    if (request->hasParam("tempLimit")) tempLimit = request->getParam("tempLimit")->value().toFloat();
+    if (request->hasParam("humLow")) humLowLimit = request->getParam("humLow")->value().toFloat();
+    if (request->hasParam("humHigh")) humHighLimit = request->getParam("humHigh")->value().toFloat();
+    if (request->hasParam("gasLimit")) gasLimitRaw = request->getParam("gasLimit")->value().toInt();
+    if (request->hasParam("radarLimit")) radarLimitCm = request->getParam("radarLimit")->value().toFloat();
+    if (request->hasParam("mqtt")) mqttEnabled = request->getParam("mqtt")->value().toInt() == 1;
+    if (request->hasParam("mqttBase")) mqttBaseTopic = request->getParam("mqttBase")->value();
+
+    xSemaphoreTake(stateMutex, portMAX_DELAY);
+    addEvent("CONFIG", "INFO", "Configuration mise à jour");
+    xSemaphoreGive(stateMutex);
+
+    request->send(200, "application/json", "{\"ok\":true}");
   });
 
   server.begin();
@@ -852,15 +933,15 @@ void setupWebServer() {
 // Tâches FreeRTOS
 // =====================================================
 
-// Priorité 3 / Core 1
-// Rôle : lecture capteurs et création des paquets.
-// Priorité la plus haute car l'acquisition ne doit pas dépendre du réseau.
+// Priorité 3 / Core 1 : acquisition capteurs.
+// La mesure HC-SR04 utilise pulseIn avec timeout court,
+// donc elle reste acceptable dans cette tâche.
 void taskSensors(void* parameter) {
   TickType_t lastWake = xTaskGetTickCount();
 
-  bool previousPir = false;
-  bool previousHw = false;
-  bool previousButton = false;
+  bool prevRadarObject = false;
+  bool prevHw = false;
+  bool prevButton = false;
 
   for (;;) {
     uint32_t start = micros();
@@ -870,7 +951,10 @@ void taskSensors(void* parameter) {
     bool dhtOk = !isnan(temp) && !isnan(hum);
 
     int gasRawLocal = analogRead(GAS_AO_PIN);
-    bool pir = digitalRead(PIR_PIN) == HIGH;
+
+    float distance = readDistanceCm();
+    bool radarOk = distance > 0;
+    bool radarObject = radarOk && distance <= radarLimitCm;
 
     int hwRaw = digitalRead(HW499_PIN);
     bool hw = HW499_ACTIVE_LOW ? hwRaw == LOW : hwRaw == HIGH;
@@ -879,7 +963,7 @@ void taskSensors(void* parameter) {
 
     xSemaphoreTake(stateMutex, portMAX_DELAY);
 
-    state.sequence++;
+    state.seq++;
 
     if (dhtOk) {
       state.temp = temp;
@@ -893,61 +977,70 @@ void taskSensors(void* parameter) {
     else state.gasFiltered = state.gasFiltered * 0.85 + gasRawLocal * 0.15;
 
     state.gasPercent = (state.gasFiltered / 4095.0) * 100.0;
-
-    // Détection simple capteur gaz suspect.
     state.gasOk = !(gasRawLocal < 5 || gasRawLocal > 4090);
 
-    state.pir = pir;
+    state.distanceCm = distance;
+    state.radarOk = radarOk;
+    state.radarObject = radarObject;
+
     state.hw499 = hw;
     state.buttonPressed = buttonPressed;
 
+    state.securityEnabled = securityEnabled;
+    state.intrusionLatched = intrusionLatched;
+
     readJoystickUnsafe();
 
-    if (pir && !previousPir) {
-      state.pirCount++;
-      addEvent("PIR", "INFO", "Mouvement détecté");
+    if (radarObject && !prevRadarObject) {
+      state.radarDetectCount++;
+      addEvent("RADAR", "INFO", "Objet détecté par HC-SR04");
 
-      if (state.securityEnabled) {
+      if (securityEnabled) {
+        intrusionLatched = true;
         state.intrusionLatched = true;
         state.intrusionCount++;
-        addEvent("SECURITE", "CRITIQUE", "Intrusion détectée");
+        addEvent("SECURITE", "CRITIQUE", "Intrusion radar détectée");
       }
     }
 
-    if (hw && !previousHw) {
+    if (hw && !prevHw) {
       state.hw499Count++;
       addEvent("HW499", "INFO", "Événement HW-499 détecté");
     }
 
-    if (buttonPressed && !previousButton) {
-      if (state.intrusionLatched) {
+    if (buttonPressed && !prevButton) {
+      if (intrusionLatched) {
+        intrusionLatched = false;
         state.intrusionLatched = false;
         addEvent("BOUTON", "INFO", "Alarme acquittée par bouton");
       } else {
-        state.securityEnabled = !state.securityEnabled;
-        addEvent("BOUTON", "INFO", state.securityEnabled ? "Sécurité activée" : "Sécurité désactivée");
+        securityEnabled = !securityEnabled;
+        state.securityEnabled = securityEnabled;
+        addEvent("BOUTON", "INFO", securityEnabled ? "Sécurité activée" : "Sécurité désactivée");
       }
     }
 
-    previousPir = pir;
-    previousHw = hw;
-    previousButton = buttonPressed;
+    prevRadarObject = radarObject;
+    prevHw = hw;
+    prevButton = buttonPressed;
 
-    updateMinMax(state.temp, state.humidity, gasRawLocal);
+    updateMinMax(state.temp, state.humidity, gasRawLocal, distance);
 
-    state.riskScore = computeRisk(state.temp, state.humidity, gasRawLocal, pir, hw, dhtOk);
+    state.riskScore = computeRisk(state.temp, state.humidity, gasRawLocal, distance, radarObject, hw, dhtOk);
     state.riskState = riskName(state.riskScore, dhtOk);
 
     SensorPacket p;
-    p.seq = state.sequence;
+    p.seq = state.seq;
     p.uptimeMs = millis();
     p.temp = state.temp;
     p.humidity = state.humidity;
+    p.dhtOk = dhtOk;
     p.gasRaw = gasRawLocal;
     p.gasPercent = state.gasPercent;
-    p.pir = pir;
+    p.distanceCm = distance;
+    p.radarObject = radarObject;
+    p.radarOk = radarOk;
     p.hw499 = hw;
-    p.dhtOk = dhtOk;
     p.wifiOk = WiFi.status() == WL_CONNECTED;
     p.riskScore = state.riskScore;
     strncpy(p.riskState, state.riskState.c_str(), sizeof(p.riskState) - 1);
@@ -962,13 +1055,11 @@ void taskSensors(void* parameter) {
     taskSensorsLoops++;
     recordBusy(1, start);
 
-    vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(2000));
+    vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(1200));
   }
 }
 
-// Priorité 2 / Core 0
-// Rôle : publication MQTT, stockage offline, replay.
-// Le réseau peut attendre, donc priorité plus faible que les capteurs.
+// Priorité 2 / Core 0 : MQTT + offline/replay.
 void taskMqtt(void* parameter) {
   for (;;) {
     uint32_t start = micros();
@@ -995,7 +1086,6 @@ void taskMqtt(void* parameter) {
     if (xQueueReceive(sensorQueue, &p, pdMS_TO_TICKS(500)) == pdTRUE) {
       String line = packetToJson(p, false);
 
-      // Historique local pour les graphes, même si MQTT fonctionne.
       appendLine(HISTORY_FILE, line, MAX_HISTORY_BYTES);
 
       bool sent = mqttPublishLine(line, false);
@@ -1013,9 +1103,7 @@ void taskMqtt(void* parameter) {
   }
 }
 
-// Priorité 2 / Core 1
-// Rôle : supervision et sécurité.
-// Surveille l'état global et pilote buzzer/LED.
+// Priorité 2 / Core 1 : supervision LEDs/buzzer.
 void taskSupervision(void* parameter) {
   for (;;) {
     uint32_t start = micros();
@@ -1023,29 +1111,24 @@ void taskSupervision(void* parameter) {
     xSemaphoreTake(stateMutex, portMAX_DELAY);
 
     bool danger = state.riskScore >= 55 || state.intrusionLatched;
-    bool wifiOk = WiFi.status() == WL_CONNECTED;
 
-    applyLedsUnsafe();
-    alarmOn(danger);
-
-    static bool previousWifi = true;
-    if (wifiOk != previousWifi) {
-      addEvent("WIFI", wifiOk ? "INFO" : "WARNING", wifiOk ? "WiFi reconnecté" : "WiFi déconnecté");
-      previousWifi = wifiOk;
+    if (manualLedMode) {
+      applyManualLedsUnsafe();
+    } else {
+      applyAutoLedsUnsafe();
     }
+
+    alarmOn(danger);
 
     xSemaphoreGive(stateMutex);
 
-    taskSupervisionLoops++;
     recordBusy(1, start);
 
     vTaskDelay(pdMS_TO_TICKS(250));
   }
 }
 
-// Priorité 1 / Core 0
-// Rôle : reconnexion WiFi.
-// Faible priorité car le système doit continuer sans réseau.
+// Priorité 1 / Core 0 : WiFi.
 void taskWiFi(void* parameter) {
   for (;;) {
     uint32_t start = micros();
@@ -1064,22 +1147,7 @@ void taskWiFi(void* parameter) {
   }
 }
 
-// Priorité 1 / Core 0
-// Rôle : heartbeat Web.
-// Le serveur AsyncWebServer travaille surtout par callbacks, donc cette tâche reste légère.
-void taskWeb(void* parameter) {
-  for (;;) {
-    uint32_t start = micros();
-
-    taskWebLoops++;
-
-    recordBusy(0, start);
-    vTaskDelay(pdMS_TO_TICKS(1000));
-  }
-}
-
-// Priorité 1 / Core 0
-// Rôle : calcul périodique de charge CPU estimée.
+// Priorité 1 / Core 0 : charge CPU estimée.
 void taskCpuMonitor(void* parameter) {
   for (;;) {
     portENTER_CRITICAL(&metricsMux);
@@ -1091,7 +1159,6 @@ void taskCpuMonitor(void* parameter) {
 
     portEXIT_CRITICAL(&metricsMux);
 
-    // Fenêtre de 1 seconde : 1 000 000 us = 100 %
     core0Load = min(100.0f, (c0 / 1000000.0f) * 100.0f);
     core1Load = min(100.0f, (c1 / 1000000.0f) * 100.0f);
 
@@ -1099,23 +1166,25 @@ void taskCpuMonitor(void* parameter) {
   }
 }
 
-// Priorité 1 / Core 0
-// Rôle : logs série. Utile en débogage, mais non prioritaire.
+// Priorité 1 / Core 0 : logs.
 void taskSystemLog(void* parameter) {
   for (;;) {
-    Serial.println("===== Station IoT ESGI optimisée =====");
+    Serial.println("===== Station IoT HC-SR04 =====");
     Serial.print("IP: ");
     Serial.println(WiFi.localIP());
+    Serial.print("Distance: ");
+    Serial.print(state.distanceCm);
+    Serial.println(" cm");
     Serial.print("MQTT: ");
     Serial.println(mqttConnected ? "connecte" : "off/deconnecte");
-    Serial.print("Core0 load: ");
+    Serial.print("Core0: ");
     Serial.print(core0Load);
-    Serial.print("% | Core1 load: ");
+    Serial.print("% | Core1: ");
     Serial.print(core1Load);
     Serial.println("%");
     Serial.print("Heap: ");
     Serial.println(ESP.getFreeHeap());
-    Serial.println("======================================");
+    Serial.println("================================");
 
     vTaskDelay(pdMS_TO_TICKS(8000));
   }
@@ -1132,9 +1201,13 @@ void setup() {
 
   dht.begin();
 
-  pinMode(PIR_PIN, INPUT);
+  pinMode(GAS_AO_PIN, INPUT);
   pinMode(HW499_PIN, INPUT_PULLUP);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
+
+  pinMode(HCSR04_TRIG_PIN, OUTPUT);
+  pinMode(HCSR04_ECHO_PIN, INPUT);
+  digitalWrite(HCSR04_TRIG_PIN, LOW);
 
   pinMode(JOY_SW_PIN, INPUT_PULLUP);
 
@@ -1168,25 +1241,23 @@ void setup() {
   setupWebServer();
 
   xSemaphoreTake(stateMutex, portMAX_DELAY);
-  addEvent("SYSTEME", "INFO", "Station IoT optimisée démarrée");
+  addEvent("SYSTEME", "INFO", "Station IoT HC-SR04 démarrée");
   xSemaphoreGive(stateMutex);
 
-  // Répartition volontaire :
-  // Core 1 : acquisition + supervision temps réel.
-  // Core 0 : réseau, MQTT, Web, logs.
+  // Core 1 : capteurs + supervision temps réel
+  // Core 0 : réseau, MQTT, Web, logs
   xTaskCreatePinnedToCore(taskSensors, "TaskSensors", 4096, NULL, 3, NULL, 1);
   xTaskCreatePinnedToCore(taskMqtt, "TaskMQTT", 6144, NULL, 2, NULL, 0);
   xTaskCreatePinnedToCore(taskSupervision, "TaskSupervision", 4096, NULL, 2, NULL, 1);
   xTaskCreatePinnedToCore(taskWiFi, "TaskWiFi", 3072, NULL, 1, NULL, 0);
-  xTaskCreatePinnedToCore(taskWeb, "TaskWeb", 2048, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(taskCpuMonitor, "TaskCpuMonitor", 2048, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(taskSystemLog, "TaskSystemLog", 3072, NULL, 1, NULL, 0);
 
-  Serial.println("Setup termine : loop vide, FreeRTOS actif.");
+  Serial.println("Setup terminé : loop vide, FreeRTOS actif.");
 }
 
 // =====================================================
-// loop vide : exigence du projet
+// loop vide
 // =====================================================
 void loop() {
 }

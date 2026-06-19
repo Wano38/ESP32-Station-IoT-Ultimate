@@ -5,233 +5,187 @@ extern const char index_html[] PROGMEM = R"rawliteral(
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Station IoT ESGI</title>
+  <title>Station IoT ESP32 - ESGI</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <style>
-    :root {
+    :root{
       --blue:#073985;
       --blue2:#0b55d9;
-      --lightBlue:#d9e7ff;
-      --sky:#eef5ff;
-      --ink:#071d49;
-      --muted:#64748b;
-      --border:#d7e0ee;
+      --bg:#f6f8fc;
       --card:#ffffff;
-      --bg:#f5f7fb;
+      --ink:#071d49;
+      --muted:#667085;
+      --line:#d9e2ef;
+      --soft:#eef5ff;
       --green:#198754;
       --orange:#f59e0b;
       --red:#dc3545;
-      --shadow:0 12px 30px rgba(7,29,73,.08);
-      --radius:26px;
+      --shadow:0 8px 24px rgba(7,29,73,.07);
+      --radius:18px;
     }
 
     *{box-sizing:border-box}
     body{
       margin:0;
       font-family:Arial,Helvetica,sans-serif;
-      color:var(--ink);
       background:var(--bg);
+      color:var(--ink);
     }
 
-    .page{
-      min-height:100vh;
+    .top{
       position:relative;
-      overflow-x:hidden;
-      padding-bottom:44px;
+      overflow:hidden;
+      background:#fff;
+      border-bottom:1px solid var(--line);
+      padding:28px 18px 22px;
     }
-
-    .shapeTop{
-      position:absolute;
-      top:-80px;
-      left:-50px;
-      width:420px;
-      height:170px;
-      border-radius:0 0 220px 0;
-      background:var(--blue);
-      z-index:0;
-    }
-    .shapeTop2{
-      position:absolute;
-      top:38px;
-      left:0;
-      width:260px;
-      height:95px;
-      border-radius:0 0 180px 0;
-      background:rgba(73,132,255,.55);
-      z-index:0;
-    }
-    .shapeRight{
-      position:absolute;
-      top:-75px;
-      right:-60px;
-      width:420px;
-      height:170px;
-      border-radius:0 0 0 220px;
-      background:var(--blue);
-      z-index:0;
-    }
-    .shapeRight2{
-      position:absolute;
-      top:42px;
-      right:0;
-      width:270px;
-      height:88px;
-      border-radius:0 0 0 180px;
-      background:rgba(73,132,255,.40);
-      z-index:0;
-    }
-    .shapeBottom{
-      position:absolute;
-      left:-55px;
-      bottom:-40px;
-      width:360px;
-      height:120px;
-      transform:rotate(-4deg);
-      background:linear-gradient(135deg,#1300a8 0%,#0d2d69 70%);
-      border-radius:14px;
-      z-index:0;
-    }
-    .shapeBottom:after{
+    .top:before{
       content:"";
       position:absolute;
-      right:22px;
-      top:-16px;
-      width:48px;
-      height:48px;
-      background:#b7bdc6;
-      transform:rotate(45deg);
+      left:-70px;
+      top:-70px;
+      width:380px;
+      height:150px;
+      border-radius:0 0 230px 0;
+      background:var(--blue);
+    }
+    .top:after{
+      content:"";
+      position:absolute;
+      right:-70px;
+      top:-70px;
+      width:380px;
+      height:150px;
+      border-radius:0 0 0 230px;
+      background:var(--blue);
     }
 
-    header{
+    .topInner{
       position:relative;
       z-index:1;
-      height:150px;
+      width:min(1180px,calc(100% - 10px));
+      margin:auto;
       display:flex;
-      justify-content:center;
       align-items:center;
-      text-align:center;
+      justify-content:space-between;
+      gap:16px;
+    }
+
+    .brand h1{
+      margin:0;
+      font-size:30px;
+      color:var(--ink);
+    }
+    .brand p{
+      margin:7px 0 0;
+      color:var(--muted);
+      font-size:14px;
     }
 
     .logo{
-      position:absolute;
-      top:18px;
-      right:24px;
       text-align:right;
       font-weight:900;
-      letter-spacing:-2px;
       color:var(--ink);
-      font-size:34px;
+      font-size:32px;
+      letter-spacing:-2px;
       line-height:.8;
     }
     .logo span{
       display:block;
       font-size:11px;
       letter-spacing:0;
-      font-weight:700;
       color:#2575e6;
-      margin-top:5px;
+      margin-top:6px;
     }
 
-    .titleBlock h1{
-      margin:0;
-      font-size:36px;
-      color:var(--ink);
-      letter-spacing:.5px;
-    }
-    .titleBlock p{
-      margin:8px 0 0;
-      color:var(--muted);
-      font-size:15px;
+    .wrap{
+      width:min(1180px,calc(100% - 24px));
+      margin:18px auto 0;
     }
 
-    main{
-      position:relative;
-      z-index:1;
-      width:min(1180px,calc(100% - 36px));
-      margin:0 auto;
-    }
-
-    .heroCard{
+    .hero{
       background:var(--card);
-      border:1px solid var(--border);
-      border-radius:var(--radius);
+      border:1px solid var(--line);
+      border-radius:24px;
       box-shadow:var(--shadow);
-      padding:26px;
-      min-height:210px;
+      padding:20px;
       display:grid;
-      grid-template-columns:1.25fr .75fr;
-      gap:18px;
+      grid-template-columns:1.35fr .65fr;
+      gap:16px;
       align-items:center;
-      overflow:hidden;
-      position:relative;
     }
 
-    .heroCard:after{
-      content:"";
-      position:absolute;
-      right:-60px;
-      bottom:-90px;
-      width:260px;
-      height:260px;
-      border:34px solid rgba(11,85,217,.12);
-      border-radius:50%;
+    .hero h2{
+      margin:0 0 8px;
+      font-size:24px;
+    }
+    .hero p{
+      margin:0;
+      color:var(--muted);
+      line-height:1.45;
     }
 
-    .kpiBig{
-      font-size:72px;
-      line-height:.9;
+    .risk{
+      text-align:center;
+    }
+    .risk .num{
+      font-size:60px;
       font-weight:900;
       color:var(--blue);
-      text-align:center;
+      line-height:1;
     }
-    .kpiLabel{
-      text-align:center;
-      margin-top:12px;
-      font-size:14px;
-      font-weight:800;
-      text-transform:uppercase;
+    .risk .label{
+      margin-top:6px;
+      font-weight:900;
       color:var(--ink);
+      text-transform:uppercase;
+      font-size:13px;
     }
 
-    .statusPills{
+    .pills{
       display:flex;
       flex-wrap:wrap;
       gap:8px;
-      margin-top:18px;
+      margin-top:14px;
     }
     .pill{
-      border:1px solid var(--border);
-      background:#f8fbff;
-      padding:8px 12px;
-      border-radius:999px;
+      border:1px solid var(--line);
+      background:var(--soft);
       color:var(--ink);
+      padding:7px 10px;
+      border-radius:999px;
+      font-weight:800;
       font-size:13px;
-      font-weight:700;
     }
-    .pill.ok{color:var(--green)}
-    .pill.warn{color:var(--orange)}
-    .pill.bad{color:var(--red)}
+    .ok{color:var(--green)!important}
+    .warn{color:var(--orange)!important}
+    .bad{color:var(--red)!important}
 
     .tabs{
       display:flex;
-      flex-wrap:wrap;
       gap:8px;
-      margin:18px 0;
+      flex-wrap:wrap;
+      margin:16px 0;
+      position:sticky;
+      top:0;
+      z-index:5;
+      background:var(--bg);
+      padding:8px 0;
     }
     .tab{
-      border:1px solid var(--border);
-      background:white;
+      border:1px solid var(--line);
+      background:#fff;
       color:var(--ink);
-      padding:10px 14px;
-      border-radius:12px;
+      padding:9px 12px;
+      border-radius:10px;
+      font-weight:900;
       cursor:pointer;
-      font-weight:800;
-      box-shadow:0 4px 12px rgba(7,29,73,.04);
+      box-shadow:0 3px 10px rgba(7,29,73,.04);
     }
     .tab.active{
       background:var(--blue);
-      color:white;
+      color:#fff;
       border-color:var(--blue);
     }
 
@@ -241,82 +195,39 @@ extern const char index_html[] PROGMEM = R"rawliteral(
     .grid{
       display:grid;
       grid-template-columns:repeat(4,minmax(0,1fr));
-      gap:14px;
-      margin-bottom:18px;
+      gap:12px;
     }
+
     .card{
-      background:white;
-      border:1px solid var(--border);
-      border-radius:18px;
-      box-shadow:0 8px 22px rgba(7,29,73,.06);
-      padding:16px;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:0 5px 16px rgba(7,29,73,.05);
+      padding:15px;
     }
+
     .span2{grid-column:span 2}
     .span4{grid-column:span 4}
 
-    .cardTitle{
+    .title{
       color:var(--muted);
-      font-size:13px;
+      font-size:12px;
+      font-weight:900;
+      letter-spacing:.5px;
       text-transform:uppercase;
-      letter-spacing:.7px;
-      font-weight:900;
-      margin-bottom:10px;
+      margin-bottom:9px;
     }
+
     .value{
-      font-size:34px;
-      font-weight:900;
       color:var(--blue);
+      font-size:31px;
+      font-weight:900;
+      line-height:1.1;
     }
+
     .sub{
+      color:var(--muted);
       margin-top:6px;
-      color:var(--muted);
-      font-size:13px;
-    }
-    .okText{color:var(--green)}
-    .warnText{color:var(--orange)}
-    .badText{color:var(--red)}
-
-    canvas.chart{
-      width:100%;
-      height:260px;
-      border:1px solid var(--border);
-      border-radius:16px;
-      background:#fff;
-    }
-
-    .controls{
-      display:flex;
-      gap:8px;
-      flex-wrap:wrap;
-      margin-top:10px;
-    }
-    button{
-      border:0;
-      background:var(--blue);
-      color:white;
-      font-weight:800;
-      padding:10px 12px;
-      border-radius:12px;
-      cursor:pointer;
-    }
-    button.secondary{background:#eef3fb;color:var(--ink);border:1px solid var(--border)}
-    button.green{background:var(--green)}
-    button.orange{background:var(--orange)}
-    button.red{background:var(--red)}
-
-    input{
-      width:100%;
-      border:1px solid var(--border);
-      border-radius:12px;
-      padding:10px;
-      margin:6px 0 12px;
-      color:var(--ink);
-      background:#fff;
-    }
-    label{
-      display:block;
-      color:var(--muted);
-      font-weight:800;
       font-size:13px;
     }
 
@@ -325,7 +236,7 @@ extern const char index_html[] PROGMEM = R"rawliteral(
       border-collapse:collapse;
     }
     td{
-      padding:8px 0;
+      padding:7px 0;
       border-bottom:1px solid #edf1f7;
       color:var(--muted);
       font-size:14px;
@@ -336,160 +247,222 @@ extern const char index_html[] PROGMEM = R"rawliteral(
       text-align:right;
     }
 
+    .controls{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:10px;
+    }
+
+    button{
+      border:0;
+      border-radius:10px;
+      padding:9px 11px;
+      background:var(--blue);
+      color:#fff;
+      font-weight:900;
+      cursor:pointer;
+    }
+    button.secondary{
+      background:#eef3fb;
+      color:var(--ink);
+      border:1px solid var(--line);
+    }
+    button.green{background:var(--green)}
+    button.orange{background:var(--orange)}
+    button.red{background:var(--red)}
+
+    input{
+      width:100%;
+      padding:9px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      margin:6px 0 11px;
+      background:#fff;
+      color:var(--ink);
+    }
+    label{
+      color:var(--muted);
+      font-size:13px;
+      font-weight:900;
+    }
+
+    canvas.chart{
+      width:100%;
+      height:250px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:#fff;
+      display:block;
+    }
+
+    .radarLayout{
+      display:grid;
+      grid-template-columns:360px 1fr;
+      gap:16px;
+      align-items:center;
+    }
+
+    #radarCanvas{
+      width:100%;
+      height:260px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:#f8fbff;
+      display:block;
+    }
+
     .events{
-      max-height:310px;
+      max-height:290px;
       overflow:auto;
+      padding-right:4px;
     }
     .event{
-      padding:10px 12px;
-      border-left:4px solid var(--blue2);
       background:#f8fbff;
+      border-left:4px solid var(--blue2);
       border-radius:10px;
+      padding:9px 10px;
       margin-bottom:8px;
     }
-    .event.WARNING{border-color:var(--orange)}
-    .event.CRITIQUE,.event.CRITICAL{border-color:var(--red)}
+    .event.WARNING{border-left-color:var(--orange)}
+    .event.CRITIQUE,.event.CRITICAL{border-left-color:var(--red)}
     .eventTop{
       display:flex;
       justify-content:space-between;
-      gap:10px;
       color:var(--muted);
       font-size:12px;
-      font-weight:800;
+      font-weight:900;
       margin-bottom:4px;
     }
 
-    .gameCanvas{
-      width:100%;
-      max-width:460px;
-      height:360px;
-      border:2px solid var(--blue);
-      border-radius:16px;
-      background:#f8fbff;
-      display:block;
-      margin:auto;
-    }
-
     footer{
-      position:relative;
-      z-index:1;
-      width:min(1180px,calc(100% - 36px));
-      margin:18px auto 0;
+      width:min(1180px,calc(100% - 24px));
+      margin:18px auto;
+      color:var(--muted);
+      font-size:13px;
       display:flex;
       justify-content:space-between;
-      align-items:center;
-      gap:12px;
+      gap:10px;
       flex-wrap:wrap;
-      color:var(--ink);
-      font-weight:800;
-      font-size:13px;
-    }
-    .classification{
-      border:6px solid var(--ink);
-      border-radius:8px;
-      padding:8px 12px;
-      background:white;
-    }
-    .pageNum{
-      border:6px solid var(--ink);
-      border-radius:8px;
-      padding:8px 12px;
-      background:white;
+      align-items:center;
     }
 
-    @media(max-width:850px){
-      header{height:130px}
-      .titleBlock h1{font-size:26px}
-      .logo{font-size:26px}
-      .heroCard{grid-template-columns:1fr}
+    .badgeFooter{
+      border:4px solid var(--ink);
+      border-radius:8px;
+      background:#fff;
+      color:var(--ink);
+      font-weight:900;
+      padding:7px 10px;
+    }
+
+    @media(max-width:900px){
+      .topInner,.hero,.radarLayout{grid-template-columns:1fr;display:grid}
       .grid{grid-template-columns:1fr}
       .span2,.span4{grid-column:span 1}
-      .kpiBig{font-size:54px}
+      .logo{font-size:25px}
+      .brand h1{font-size:24px}
+      .risk .num{font-size:46px}
     }
   </style>
 </head>
 
 <body>
-<div class="page">
-  <div class="shapeTop"></div>
-  <div class="shapeTop2"></div>
-  <div class="shapeRight"></div>
-  <div class="shapeRight2"></div>
-  <div class="shapeBottom"></div>
-
-  <header>
-    <div class="logo">ESGI<span>école supérieure de<br>génie informatique</span></div>
-    <div class="titleBlock">
-      <h1>Station IoT Industrielle</h1>
-      <p>ESP32 • FreeRTOS • MQTT • Offline Replay • Supervision</p>
+  <header class="top">
+    <div class="topInner">
+      <div class="brand">
+        <h1>Station IoT ESP32</h1>
+        <p>HC-SR04 • DHT22 • Gaz MQ • FreeRTOS • MQTT • Offline Replay</p>
+      </div>
+      <div class="logo">ESGI<span>école supérieure de<br>génie informatique</span></div>
     </div>
   </header>
 
-  <main>
-    <section class="heroCard">
+  <div class="wrap">
+    <section class="hero">
       <div>
-        <h2 style="margin:0;color:var(--ink);font-size:28px;">Dashboard de supervision</h2>
-        <p style="color:var(--muted);line-height:1.5;">
-          Acquisition capteurs, surveillance réseau, base locale, MQTT et supervision processeur double cœur.
-        </p>
-        <div class="statusPills">
+        <h2>Supervision fonctionnelle</h2>
+        <p>Interface allégée pour limiter la latence : une seule API principale, graphiques Canvas natifs, radar léger, commandes directes.</p>
+        <div class="pills">
           <span class="pill" id="clock">--:--:--</span>
           <span class="pill" id="wifiPill">WiFi --</span>
           <span class="pill" id="mqttPill">MQTT --</span>
-          <span class="pill" id="offlinePill">Offline --</span>
           <span class="pill" id="securityPill">Sécurité --</span>
+          <span class="pill" id="radarPill">Radar --</span>
         </div>
       </div>
-      <div>
-        <div class="kpiBig" id="riskHero">--%</div>
-        <div class="kpiLabel" id="riskHeroLabel">Score de risque</div>
+      <div class="risk">
+        <div class="num" id="riskHero">--%</div>
+        <div class="label" id="riskLabel">Risque</div>
       </div>
     </section>
 
     <nav class="tabs">
-      <button class="tab active" onclick="showTab('dash',this)">Dashboard</button>
-      <button class="tab" onclick="showTab('graphs',this)">Graphiques</button>
-      <button class="tab" onclick="showTab('cpu',this)">Supervision CPU</button>
-      <button class="tab" onclick="showTab('offline',this)">BDD / Offline</button>
-      <button class="tab" onclick="showTab('game',this)">Jeu joystick</button>
-      <button class="tab" onclick="showTab('settings',this)">Réglages</button>
+      <button class="tab active" data-tab="dash">Dashboard</button>
+      <button class="tab" data-tab="radar">Radar</button>
+      <button class="tab" data-tab="graphs">Graphiques</button>
+      <button class="tab" data-tab="leds">LEDs</button>
+      <button class="tab" data-tab="system">Système</button>
+      <button class="tab" data-tab="settings">Réglages</button>
     </nav>
 
     <section id="dash" class="section active">
       <div class="grid">
         <div class="card">
-          <div class="cardTitle">Température</div>
+          <div class="title">Température</div>
           <div class="value" id="tempVal">-- °C</div>
           <div class="sub" id="dhtState">DHT22 --</div>
         </div>
         <div class="card">
-          <div class="cardTitle">Humidité</div>
+          <div class="title">Humidité</div>
           <div class="value" id="humVal">-- %</div>
-          <div class="sub">Seuils configurables</div>
+          <div class="sub">Mesure DHT22</div>
         </div>
         <div class="card">
-          <div class="cardTitle">Gaz MQ</div>
+          <div class="title">Gaz MQ</div>
           <div class="value" id="gasVal">--</div>
-          <div class="sub" id="gasState">Capteur gaz --</div>
+          <div class="sub" id="gasState">Gaz --</div>
         </div>
         <div class="card">
-          <div class="cardTitle">Présence</div>
-          <div class="value" id="pirVal">--</div>
-          <div class="sub">PIR + HW-499</div>
+          <div class="title">Distance</div>
+          <div class="value" id="distVal">-- cm</div>
+          <div class="sub" id="distState">HC-SR04 --</div>
         </div>
         <div class="card span2">
-          <div class="cardTitle">État système</div>
+          <div class="title">État général</div>
           <table>
-            <tr><td>Adresse IP</td><td id="ipVal">--</td></tr>
-            <tr><td>RSSI WiFi</td><td id="rssiVal">--</td></tr>
-            <tr><td>Heap libre</td><td id="heapVal">--</td></tr>
-            <tr><td>Uptime</td><td id="uptimeVal">--</td></tr>
-            <tr><td>Queue capteurs</td><td id="queueVal">--</td></tr>
+            <tr><td>Objet détecté</td><td id="objVal">--</td></tr>
+            <tr><td>Sécurité</td><td id="secVal">--</td></tr>
+            <tr><td>Intrusion</td><td id="intrVal">--</td></tr>
+            <tr><td>Détections radar</td><td id="radarCountVal">--</td></tr>
+            <tr><td>HW-499</td><td id="hwVal">--</td></tr>
           </table>
         </div>
         <div class="card span2">
-          <div class="cardTitle">Historique événements avec heure</div>
+          <div class="title">Historique événements</div>
           <div class="events" id="eventsList">Chargement...</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="radar" class="section">
+      <div class="card span4">
+        <div class="title">Radar détecteur HC-SR04</div>
+        <div class="radarLayout">
+          <canvas id="radarCanvas" width="360" height="260"></canvas>
+          <div>
+            <table>
+              <tr><td>Distance actuelle</td><td id="radarDist">--</td></tr>
+              <tr><td>Seuil de détection</td><td id="radarLimitText">--</td></tr>
+              <tr><td>Distance minimale</td><td id="distanceMinVal">--</td></tr>
+              <tr><td>État radar</td><td id="radarStatus">--</td></tr>
+            </table>
+            <div class="controls">
+              <button class="red" data-action="securityOn">Sécurité ON</button>
+              <button class="secondary" data-action="securityOff">Sécurité OFF</button>
+              <button class="orange" data-action="ack">Acquitter alarme</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -497,100 +470,94 @@ extern const char index_html[] PROGMEM = R"rawliteral(
     <section id="graphs" class="section">
       <div class="grid">
         <div class="card span4">
-          <div class="cardTitle">Mesures live avec ligne de temps</div>
-          <canvas id="sensorChart" class="chart" width="1000" height="280"></canvas>
+          <div class="title">Capteurs avec heure actuelle</div>
+          <canvas id="sensorChart" class="chart" width="1000" height="260"></canvas>
         </div>
         <div class="card span4">
-          <div class="cardTitle">Timeline réseau / MQTT / offline / risque</div>
-          <canvas id="networkChart" class="chart" width="1000" height="280"></canvas>
+          <div class="title">Réseau / MQTT / Offline / Risque</div>
+          <canvas id="networkChart" class="chart" width="1000" height="260"></canvas>
           <div class="controls">
-            <button class="secondary" onclick="loadHistory()">Recharger historique LittleFS</button>
-            <button class="orange" onclick="action('mqttFault5')">Panne MQTT 5 min</button>
-            <button class="orange" onclick="action('mqttFault30')">Panne MQTT 30 min</button>
-            <button class="secondary" onclick="action('mqttFaultOff')">Stop panne MQTT</button>
+            <button class="secondary" id="reloadHistory">Recharger historique</button>
+            <button class="orange" data-action="mqttFault5">Panne MQTT 5 min</button>
+            <button class="secondary" data-action="mqttFaultOff">Stop panne MQTT</button>
           </div>
         </div>
       </div>
     </section>
 
-    <section id="cpu" class="section">
+    <section id="leds" class="section">
       <div class="grid">
         <div class="card span4">
-          <div class="cardTitle">Supervision processeur ESP32 double cœur</div>
-          <canvas id="cpuChart" class="chart" width="1000" height="280"></canvas>
+          <div class="title">Commandes LEDs</div>
+          <div class="controls">
+            <button class="green" data-action="autoLeds">Mode automatique</button>
+            <button class="secondary" data-action="manualLeds">Mode manuel</button>
+            <button class="red" data-action="allLedsOff">Toutes OFF</button>
+            <button data-led="red" data-on="1">Rouge ON</button>
+            <button class="secondary" data-led="red" data-on="0">Rouge OFF</button>
+            <button data-led="blue" data-on="1">Bleue ON</button>
+            <button class="secondary" data-led="blue" data-on="0">Bleue OFF</button>
+            <button data-led="green" data-on="1">Verte ON</button>
+            <button class="secondary" data-led="green" data-on="0">Verte OFF</button>
+            <button data-led="yellow" data-on="1">Jaune ON</button>
+            <button class="secondary" data-led="yellow" data-on="0">Jaune OFF</button>
+            <button data-led="white" data-on="1">Blanche ON</button>
+            <button class="secondary" data-led="white" data-on="0">Blanche OFF</button>
+          </div>
         </div>
         <div class="card span2">
-          <div class="cardTitle">Charge estimée</div>
+          <div class="title">État LEDs</div>
           <table>
-            <tr><td>Core 0 réseau/web/MQTT</td><td id="core0Val">-- %</td></tr>
-            <tr><td>Core 1 capteurs/supervision</td><td id="core1Val">-- %</td></tr>
-            <tr><td>Latence MQTT</td><td id="mqttLatencyVal">--</td></tr>
-            <tr><td>Publications MQTT OK</td><td id="mqttOkVal">--</td></tr>
+            <tr><td>Mode manuel</td><td id="ledModeVal">--</td></tr>
+            <tr><td>Rouge</td><td id="ledRedVal">--</td></tr>
+            <tr><td>Bleue</td><td id="ledBlueVal">--</td></tr>
+            <tr><td>Verte</td><td id="ledGreenVal">--</td></tr>
+            <tr><td>Jaune</td><td id="ledYellowVal">--</td></tr>
+            <tr><td>Blanche</td><td id="ledWhiteVal">--</td></tr>
+          </table>
+        </div>
+        <div class="card span2">
+          <div class="title">Buzzer / sécurité</div>
+          <div class="controls">
+            <button class="green" data-action="soundOn">Son ON</button>
+            <button class="secondary" data-action="soundOff">Son OFF</button>
+            <button class="red" data-action="securityOn">Sécurité ON</button>
+            <button class="secondary" data-action="securityOff">Sécurité OFF</button>
+            <button class="orange" data-action="ack">Acquitter</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="system" class="section">
+      <div class="grid">
+        <div class="card span2">
+          <div class="title">ESP32</div>
+          <table>
+            <tr><td>IP</td><td id="ipVal">--</td></tr>
+            <tr><td>RSSI</td><td id="rssiVal">--</td></tr>
+            <tr><td>Heap libre</td><td id="heapVal">--</td></tr>
+            <tr><td>Uptime</td><td id="uptimeVal">--</td></tr>
+            <tr><td>Queue</td><td id="queueVal">--</td></tr>
+            <tr><td>Core 0</td><td id="core0Val">--</td></tr>
+            <tr><td>Core 1</td><td id="core1Val">--</td></tr>
+          </table>
+        </div>
+        <div class="card span2">
+          <div class="title">MQTT / Offline</div>
+          <table>
+            <tr><td>MQTT</td><td id="mqttVal">--</td></tr>
+            <tr><td>Latence MQTT</td><td id="latencyVal">--</td></tr>
+            <tr><td>Publications OK</td><td id="mqttOkVal">--</td></tr>
             <tr><td>Erreurs MQTT</td><td id="mqttFailVal">--</td></tr>
-          </table>
-        </div>
-        <div class="card span2">
-          <div class="cardTitle">Répartition FreeRTOS</div>
-          <table>
-            <tr><td>TaskSensors</td><td>Priorité 3 • Core 1</td></tr>
-            <tr><td>TaskMQTT</td><td>Priorité 2 • Core 0</td></tr>
-            <tr><td>TaskSupervision</td><td>Priorité 2 • Core 1</td></tr>
-            <tr><td>TaskWiFi / TaskWeb</td><td>Priorité 1 • Core 0</td></tr>
-            <tr><td>TaskCpuMonitor</td><td>Priorité 1 • Core 0</td></tr>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <section id="offline" class="section">
-      <div class="grid">
-        <div class="card span2">
-          <div class="cardTitle">Base locale / Offline</div>
-          <table>
-            <tr><td>Données offline</td><td id="offlineVal">--</td></tr>
-            <tr><td>Données rejouées</td><td id="replayedVal">--</td></tr>
-            <tr><td>Queue drops</td><td id="dropsVal">--</td></tr>
-            <tr><td>Panne MQTT restante</td><td id="mqttFaultVal">--</td></tr>
-            <tr><td>Coupure WiFi restante</td><td id="wifiOffVal">--</td></tr>
+            <tr><td>Offline</td><td id="offlineVal">--</td></tr>
+            <tr><td>Rejouées</td><td id="replayedVal">--</td></tr>
           </table>
           <div class="controls">
-            <button class="red" onclick="action('clearDb')">Vider BDD locale</button>
-            <button class="orange" onclick="action('wifiOff60')">Couper WiFi 1 min</button>
-            <button class="orange" onclick="action('wifiOff30')">Couper WiFi 30 min</button>
-            <button class="green" onclick="action('wifiOn')">WiFi ON</button>
+            <button class="green" data-action="mqttOn">MQTT ON</button>
+            <button class="secondary" data-action="mqttOff">MQTT OFF</button>
+            <button class="red" data-action="clearDb">Vider BDD</button>
           </div>
-        </div>
-        <div class="card span2">
-          <div class="cardTitle">Statistiques min / max</div>
-          <table>
-            <tr><td>Température min</td><td id="tempMinVal">--</td></tr>
-            <tr><td>Température max</td><td id="tempMaxVal">--</td></tr>
-            <tr><td>Humidité min</td><td id="humMinVal">--</td></tr>
-            <tr><td>Humidité max</td><td id="humMaxVal">--</td></tr>
-            <tr><td>Gaz max</td><td id="gasMaxVal">--</td></tr>
-          </table>
-          <div class="controls">
-            <button class="secondary" onclick="action('resetStats')">Reset statistiques</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="game" class="section">
-      <div class="grid">
-        <div class="card span2">
-          <div class="cardTitle">Snake joystick HW-504</div>
-          <canvas id="snake" class="gameCanvas" width="360" height="360"></canvas>
-          <div class="sub">Joystick HW-504 ou flèches clavier. Bouton joystick ou espace pour recommencer.</div>
-        </div>
-        <div class="card span2">
-          <div class="cardTitle">Joystick</div>
-          <table>
-            <tr><td>Direction</td><td id="joyDir">--</td></tr>
-            <tr><td>X</td><td id="joyX">--</td></tr>
-            <tr><td>Y</td><td id="joyY">--</td></tr>
-            <tr><td>Bouton</td><td id="joyBtn">--</td></tr>
-          </table>
         </div>
       </div>
     </section>
@@ -598,18 +565,7 @@ extern const char index_html[] PROGMEM = R"rawliteral(
     <section id="settings" class="section">
       <div class="grid">
         <div class="card span2">
-          <div class="cardTitle">MQTT</div>
-          <label>Topic MQTT base</label>
-          <input id="mqttBase" value="campus/groupe1/ESP32-Othmane">
-          <div class="controls">
-            <button class="green" onclick="saveConfig(true)">Sauver + MQTT ON</button>
-            <button class="secondary" onclick="saveConfig(false)">Sauver + MQTT OFF</button>
-            <button class="green" onclick="action('mqttOn')">MQTT ON</button>
-            <button class="secondary" onclick="action('mqttOff')">MQTT OFF</button>
-          </div>
-        </div>
-        <div class="card span2">
-          <div class="cardTitle">Seuils</div>
+          <div class="title">Seuils</div>
           <label>Température haute</label>
           <input id="tempLimit" type="number" step="0.1" value="35">
           <label>Humidité basse</label>
@@ -618,130 +574,199 @@ extern const char index_html[] PROGMEM = R"rawliteral(
           <input id="humHigh" type="number" step="0.1" value="75">
           <label>Seuil gaz</label>
           <input id="gasLimit" type="number" step="1" value="2500">
-          <button onclick="saveConfig(false)">Sauver seuils</button>
+          <label>Seuil radar HC-SR04 en cm</label>
+          <input id="radarLimit" type="number" step="1" value="80">
+          <button id="saveThresholds">Sauver seuils</button>
         </div>
-        <div class="card span4">
-          <div class="cardTitle">Sécurité</div>
+        <div class="card span2">
+          <div class="title">MQTT</div>
+          <label>Topic MQTT base</label>
+          <input id="mqttBase" value="campus/groupe1/ESP32-Othmane">
           <div class="controls">
-            <button class="red" onclick="action('securityOn')">Sécurité ON</button>
-            <button class="secondary" onclick="action('securityOff')">Sécurité OFF</button>
-            <button class="orange" onclick="action('ack')">Acquitter alarme</button>
+            <button class="green" id="saveMqttOn">Sauver + MQTT ON</button>
+            <button class="secondary" id="saveMqttOff">Sauver + MQTT OFF</button>
           </div>
         </div>
       </div>
     </section>
-  </main>
+  </div>
 
   <footer>
-    <div class="classification">Classification : ESGI • Projet IoT ESP32</div>
-    <div>© 2026 ESGI — BALTACHE Othmane, BOUBAKER Oussema, MIVELLE Erwan</div>
-    <div class="pageNum">IoT</div>
+    <div class="badgeFooter">Classification : ESGI • Projet IoT</div>
+    <div>© 2026 ESGI — Gérard De Viala — BALTACHE Othmane, BOUBAKER Oussema, MIVELLE Erwan</div>
+    <div class="badgeFooter">HC-SR04</div>
   </footer>
-</div>
 
 <script>
+(function(){
+  "use strict";
+
   const TOKEN = "1234";
-  const MAX_POINTS = 80;
+  const MAX_POINTS = 70;
+  const POLL_MS = 1800;
+
+  const el = {};
+  const ids = [
+    "clock","wifiPill","mqttPill","securityPill","radarPill","riskHero","riskLabel",
+    "tempVal","humVal","gasVal","distVal","dhtState","gasState","distState",
+    "objVal","secVal","intrVal","radarCountVal","hwVal","eventsList",
+    "radarDist","radarLimitText","distanceMinVal","radarStatus",
+    "ledModeVal","ledRedVal","ledBlueVal","ledGreenVal","ledYellowVal","ledWhiteVal",
+    "ipVal","rssiVal","heapVal","uptimeVal","queueVal","core0Val","core1Val",
+    "mqttVal","latencyVal","mqttOkVal","mqttFailVal","offlineVal","replayedVal",
+    "tempLimit","humLow","humHigh","gasLimit","radarLimit","mqttBase",
+    "sensorChart","networkChart","radarCanvas"
+  ];
+
+  ids.forEach(id => el[id] = document.getElementById(id));
 
   let live = null;
+  let activeTab = "dash";
   let livePoints = [];
   let networkPoints = [];
-  let cpuPoints = [];
-  let lastUptime = 0;
-
-  function $(id){ return document.getElementById(id); }
-
-  function showTab(id, btn){
-    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-    $(id).classList.add('active');
-    btn.classList.add('active');
-  }
+  let lastEventLoad = 0;
+  let requestBusy = false;
 
   function fmtTime(ms){
-    return new Date(ms).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    return new Date(ms).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
   }
 
   function uptimeToClock(uptimeSec){
-    if(!live) return "—";
-    const now = Date.now();
+    if(!live) return "--";
     const delta = (live.uptime - uptimeSec) * 1000;
-    return fmtTime(now - delta);
+    return fmtTime(Date.now() - delta);
   }
 
-  function setPill(id, text, status){
-    const el = $(id);
-    el.textContent = text;
-    el.className = 'pill ' + (status || '');
+  function text(node, value){
+    if(node && node.textContent !== String(value)) node.textContent = value;
   }
 
-  function updateClock(){
-    $('clock').textContent = fmtTime(Date.now());
+  function setClass(node, base, state){
+    if(node) node.className = base + (state ? " " + state : "");
   }
-  setInterval(updateClock,1000);
-  updateClock();
 
-  async function fetchLive(){
-    try{
-      const res = await fetch('/api/live?nocache=' + Date.now());
-      live = await res.json();
-      lastUptime = live.uptime;
-      updateUI(live);
-      addLivePoint(live);
-      drawAllCharts();
-    }catch(e){
-      setPill('wifiPill','API inaccessible','bad');
+  function setPill(node, label, state){
+    text(node, label);
+    setClass(node, "pill", state);
+  }
+
+  function showTab(id, btn){
+    activeTab = id;
+    document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+    btn.classList.add("active");
+    drawVisible();
+  }
+
+  document.querySelectorAll(".tab").forEach(btn => {
+    btn.addEventListener("click", () => showTab(btn.dataset.tab, btn));
+  });
+
+  document.body.addEventListener("click", async ev => {
+    const b = ev.target.closest("button");
+    if(!b) return;
+
+    if(b.dataset.action){
+      await action(b.dataset.action);
     }
-    setTimeout(fetchLive,2000);
+
+    if(b.dataset.led){
+      await led(b.dataset.led, b.dataset.on);
+    }
+  });
+
+  document.getElementById("reloadHistory").addEventListener("click", loadHistory);
+  document.getElementById("saveThresholds").addEventListener("click", () => saveConfig(false));
+  document.getElementById("saveMqttOn").addEventListener("click", () => saveConfig(true));
+  document.getElementById("saveMqttOff").addEventListener("click", () => saveConfig(false));
+
+  setInterval(() => {
+    text(el.clock, fmtTime(Date.now()));
+    if(activeTab === "radar") drawRadar();
+  }, 1000);
+
+  async function poll(){
+    if(requestBusy){
+      setTimeout(poll, POLL_MS);
+      return;
+    }
+
+    requestBusy = true;
+
+    try{
+      const res = await fetch("/api/live?nocache=" + Date.now());
+      live = await res.json();
+
+      updateUI(live);
+      addPoint(live);
+      drawVisible();
+
+      const now = Date.now();
+      if(now - lastEventLoad > 5000){
+        lastEventLoad = now;
+        loadEvents();
+      }
+    }catch(e){
+      setPill(el.wifiPill, "API inaccessible", "bad");
+    }
+
+    requestBusy = false;
+    setTimeout(poll, POLL_MS);
   }
 
   async function loadEvents(){
     try{
-      const res = await fetch('/api/events?nocache=' + Date.now());
+      const res = await fetch("/api/events?nocache=" + Date.now());
       const events = await res.json();
-      $('eventsList').innerHTML = events.length ? events.map(ev => {
-        const levelClass = ev.level || 'INFO';
-        return `<div class="event ${levelClass}">
-          <div class="eventTop"><span>${uptimeToClock(ev.ts)} • ${ev.type} • ${ev.level}</span><span>t+${ev.ts}s</span></div>
-          <div>${ev.message}</div>
-        </div>`;
-      }).join('') : '<div class="sub">Aucun événement</div>';
+
+      if(!events.length){
+        el.eventsList.innerHTML = "<div class='sub'>Aucun événement</div>";
+        return;
+      }
+
+      el.eventsList.innerHTML = events.map(ev => (
+        "<div class='event " + ev.level + "'>" +
+          "<div class='eventTop'><span>" + uptimeToClock(ev.ts) + " • " + ev.type + " • " + ev.level + "</span><span>t+" + ev.ts + "s</span></div>" +
+          "<div>" + ev.message + "</div>" +
+        "</div>"
+      )).join("");
     }catch(e){}
   }
 
   async function loadHistory(){
     try{
-      const res = await fetch('/api/history?limit=80&nocache=' + Date.now());
+      if(!live) return;
+      const res = await fetch("/api/history?limit=70&nocache=" + Date.now());
       const hist = await res.json();
 
-      hist.forEach(p=>{
+      hist.forEach(p => {
         if(!p.createdMs) return;
-        const sec = Math.round(p.createdMs/1000);
-        const t = Date.now() - ((lastUptime - sec) * 1000);
+        const sec = Math.round(p.createdMs / 1000);
+        const t = Date.now() - ((live.uptime - sec) * 1000);
         livePoints.push({
           t,
           temp:p.temp,
           hum:p.humidity,
           gas:p.gasPercent,
-          replayed:p.replayed || false
+          distance:p.distanceCm
         });
       });
 
       livePoints = livePoints.slice(-MAX_POINTS);
-      drawAllCharts();
+      drawVisible();
     }catch(e){}
   }
 
-  setInterval(loadEvents,5000);
-
-  function addLivePoint(d){
+  function addPoint(d){
     const now = Date.now();
 
     livePoints.push({
       t:now,
       temp:d.temp,
       hum:d.humidity,
-      gas:d.gasPercent
+      gas:d.gasPercent,
+      distance:d.distanceCm
     });
 
     networkPoints.push({
@@ -752,242 +777,256 @@ extern const char index_html[] PROGMEM = R"rawliteral(
       risk:d.riskScore
     });
 
-    cpuPoints.push({
-      t:now,
-      c0:d.core0Load,
-      c1:d.core1Load,
-      heap:d.heap / 1000
-    });
-
-    livePoints = livePoints.slice(-MAX_POINTS);
-    networkPoints = networkPoints.slice(-MAX_POINTS);
-    cpuPoints = cpuPoints.slice(-MAX_POINTS);
+    if(livePoints.length > MAX_POINTS) livePoints.shift();
+    if(networkPoints.length > MAX_POINTS) networkPoints.shift();
   }
 
   function updateUI(d){
-    $('riskHero').textContent = d.riskScore + '%';
-    $('riskHeroLabel').textContent = d.riskState;
+    text(el.riskHero, d.riskScore + "%");
+    text(el.riskLabel, d.riskState);
 
-    setPill('wifiPill', d.wifi ? 'WiFi connecté' : 'WiFi déconnecté', d.wifi ? 'ok' : 'bad');
-    setPill('mqttPill', d.mqttConnected ? 'MQTT connecté' : (d.mqttEnabled ? 'MQTT actif' : 'MQTT OFF'), d.mqttConnected ? 'ok' : 'warn');
-    setPill('offlinePill', 'Offline ' + d.offlineCount, d.offlineCount > 0 ? 'warn' : 'ok');
-    setPill('securityPill', d.security ? 'Sécurité ON' : 'Sécurité OFF', d.security ? 'bad' : 'ok');
+    setPill(el.wifiPill, d.wifi ? "WiFi connecté" : "WiFi déconnecté", d.wifi ? "ok" : "bad");
+    setPill(el.mqttPill, d.mqttConnected ? "MQTT connecté" : (d.mqttEnabled ? "MQTT actif" : "MQTT OFF"), d.mqttConnected ? "ok" : "warn");
+    setPill(el.securityPill, d.security ? "Sécurité ON" : "Sécurité OFF", d.security ? "bad" : "ok");
+    setPill(el.radarPill, d.radarObject ? "Objet détecté" : "Radar libre", d.radarObject ? "bad" : "ok");
 
-    $('tempVal').textContent = d.temp === null ? 'Erreur' : d.temp.toFixed(1) + ' °C';
-    $('humVal').textContent = d.humidity === null ? 'Erreur' : d.humidity.toFixed(1) + ' %';
-    $('gasVal').textContent = d.gasRaw;
-    $('pirVal').textContent = d.pir ? 'Actif' : 'RAS';
+    text(el.tempVal, d.temp === null ? "Erreur" : d.temp.toFixed(1) + " °C");
+    text(el.humVal, d.humidity === null ? "Erreur" : d.humidity.toFixed(1) + " %");
+    text(el.gasVal, d.gasRaw);
+    text(el.distVal, d.distanceCm === null || d.distanceCm < 0 ? "--" : d.distanceCm.toFixed(1) + " cm");
 
-    $('dhtState').textContent = d.dhtOk ? 'DHT22 OK' : 'Panne DHT22';
-    $('dhtState').className = 'sub ' + (d.dhtOk ? 'okText' : 'badText');
-    $('gasState').textContent = d.gasOk ? 'Gaz OK' : 'Gaz suspect';
-    $('gasState').className = 'sub ' + (d.gasOk ? 'okText' : 'warnText');
+    text(el.dhtState, d.dhtOk ? "DHT22 OK" : "Panne DHT22");
+    setClass(el.dhtState, "sub", d.dhtOk ? "ok" : "bad");
 
-    $('ipVal').textContent = d.ip;
-    $('rssiVal').textContent = d.rssi + ' dBm';
-    $('heapVal').textContent = d.heap + ' bytes';
-    $('uptimeVal').textContent = d.uptime + ' s';
-    $('queueVal').textContent = d.queueWaiting + ' en attente / ' + d.queueSpaces + ' libres';
+    text(el.gasState, d.gasOk ? "Gaz OK" : "Gaz suspect");
+    setClass(el.gasState, "sub", d.gasOk ? "ok" : "warn");
 
-    $('core0Val').textContent = d.core0Load.toFixed(1) + ' %';
-    $('core1Val').textContent = d.core1Load.toFixed(1) + ' %';
-    $('mqttLatencyVal').textContent = d.mqttLatency + ' ms';
-    $('mqttOkVal').textContent = d.mqttOkCount;
-    $('mqttFailVal').textContent = d.mqttFailCount;
+    text(el.distState, d.radarOk ? (d.radarObject ? "Objet détecté" : "Zone libre") : "Radar sans écho");
+    setClass(el.distState, "sub", d.radarObject ? "bad" : (d.radarOk ? "ok" : "warn"));
 
-    $('offlineVal').textContent = d.offlineCount;
-    $('replayedVal').textContent = d.replayedCount;
-    $('dropsVal').textContent = d.queueDrops;
-    $('mqttFaultVal').textContent = d.mqttFaultRemaining + ' s';
-    $('wifiOffVal').textContent = d.wifiOffRemaining + ' s';
+    text(el.objVal, d.radarObject ? "OUI" : "NON");
+    text(el.secVal, d.security ? "ON" : "OFF");
+    text(el.intrVal, d.intrusion ? "OUI" : "NON");
+    text(el.radarCountVal, d.radarDetectCount);
+    text(el.hwVal, d.hw499 ? "Actif" : "RAS");
 
-    $('tempMinVal').textContent = d.tempMin === null ? '--' : d.tempMin.toFixed(1) + ' °C';
-    $('tempMaxVal').textContent = d.tempMax === null ? '--' : d.tempMax.toFixed(1) + ' °C';
-    $('humMinVal').textContent = d.humMin === null ? '--' : d.humMin.toFixed(1) + ' %';
-    $('humMaxVal').textContent = d.humMax === null ? '--' : d.humMax.toFixed(1) + ' %';
-    $('gasMaxVal').textContent = d.gasMax;
+    text(el.radarDist, d.distanceCm < 0 ? "--" : d.distanceCm.toFixed(1) + " cm");
+    text(el.radarLimitText, d.radarLimit.toFixed(1) + " cm");
+    text(el.distanceMinVal, d.distanceMin === null ? "--" : d.distanceMin.toFixed(1) + " cm");
+    text(el.radarStatus, d.radarObject ? "Objet dans la zone" : "Zone libre");
 
-    $('joyDir').textContent = d.joyDirection;
-    $('joyX').textContent = d.joyX;
-    $('joyY').textContent = d.joyY;
-    $('joyBtn').textContent = d.joyButton ? 'Appuyé' : 'Relâché';
+    text(el.ledModeVal, d.manualLedMode ? "Manuel" : "Auto");
+    text(el.ledRedVal, d.ledRed ? "ON" : "OFF");
+    text(el.ledBlueVal, d.ledBlue ? "ON" : "OFF");
+    text(el.ledGreenVal, d.ledGreen ? "ON" : "OFF");
+    text(el.ledYellowVal, d.ledYellow ? "ON" : "OFF");
+    text(el.ledWhiteVal, d.ledWhite ? "ON" : "OFF");
+
+    text(el.ipVal, d.ip);
+    text(el.rssiVal, d.rssi + " dBm");
+    text(el.heapVal, d.heap + " bytes");
+    text(el.uptimeVal, d.uptime + " s");
+    text(el.queueVal, d.queueWaiting + " attente / " + d.queueSpaces + " libres");
+    text(el.core0Val, d.core0Load.toFixed(1) + " %");
+    text(el.core1Val, d.core1Load.toFixed(1) + " %");
+
+    text(el.mqttVal, d.mqttConnected ? "Connecté" : (d.mqttEnabled ? "Actif" : "OFF"));
+    text(el.latencyVal, d.mqttLatency + " ms");
+    text(el.mqttOkVal, d.mqttOkCount);
+    text(el.mqttFailVal, d.mqttFailCount);
+    text(el.offlineVal, d.offlineCount);
+    text(el.replayedVal, d.replayedCount);
   }
 
-  function drawLineChart(canvasId, data, series, title){
-    const c = $(canvasId);
-    const ctx = c.getContext('2d');
+  function drawVisible(){
+    if(activeTab === "radar") drawRadar();
+    if(activeTab === "graphs"){
+      drawLineChart(el.sensorChart, livePoints, [
+        {key:"temp", label:"Temp °C", color:"#0b55d9", y:18},
+        {key:"hum", label:"Hum %", color:"#198754", y:36},
+        {key:"gas", label:"Gaz %", color:"#f59e0b", y:54},
+        {key:"distance", label:"Distance cm", color:"#dc3545", y:72}
+      ], "Capteurs avec heure actuelle");
+
+      drawLineChart(el.networkChart, networkPoints, [
+        {key:"wifi", label:"WiFi 0/1", color:"#198754", y:18},
+        {key:"mqtt", label:"MQTT 0/1", color:"#0b55d9", y:36},
+        {key:"offline", label:"Offline", color:"#f59e0b", y:54},
+        {key:"risk", label:"Risque", color:"#dc3545", y:72}
+      ], "Timeline réseau");
+    }
+  }
+
+  function drawLineChart(c, data, series, title){
+    if(!c || data.length < 2) return;
+
+    const ctx = c.getContext("2d");
     const w = c.width, h = c.height;
     ctx.clearRect(0,0,w,h);
-
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = "#fff";
     ctx.fillRect(0,0,w,h);
 
-    const padL = 54, padR = 18, padT = 24, padB = 42;
-    const plotW = w - padL - padR;
-    const plotH = h - padT - padB;
+    const L=54, R=18, T=24, B=42, PW=w-L-R, PH=h-T-B;
 
-    ctx.strokeStyle = '#d7e0ee';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle="#d9e2ef";
+    ctx.lineWidth=1;
     for(let i=0;i<=4;i++){
-      const y = padT + (plotH/4)*i;
-      ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();
+      const y=T+(PH/4)*i;
+      ctx.beginPath();
+      ctx.moveTo(L,y);
+      ctx.lineTo(w-R,y);
+      ctx.stroke();
     }
 
-    ctx.fillStyle = '#071d49';
-    ctx.font = 'bold 14px Arial';
-    ctx.fillText(title, padL, 16);
+    ctx.fillStyle="#071d49";
+    ctx.font="bold 14px Arial";
+    ctx.fillText(title,L,16);
 
-    if(data.length < 2) return;
+    const t0=data[0].t, t1=data[data.length-1].t || t0+1;
+    let ymin=Infinity, ymax=-Infinity;
 
-    const tMin = data[0].t;
-    const tMax = data[data.length-1].t || (tMin+1);
+    data.forEach(p => series.forEach(s => {
+      const v=p[s.key];
+      if(v!==null && v!==undefined && !isNaN(v)){
+        ymin=Math.min(ymin,v);
+        ymax=Math.max(ymax,v);
+      }
+    }));
 
-    let yMin = Infinity, yMax = -Infinity;
-    data.forEach(p=>{
-      series.forEach(s=>{
-        const v = p[s.key];
-        if(v !== null && v !== undefined && !isNaN(v)){
-          yMin = Math.min(yMin,v);
-          yMax = Math.max(yMax,v);
-        }
-      });
-    });
-    if(yMin === Infinity){ yMin = 0; yMax = 1; }
-    if(yMax === yMin) yMax = yMin + 1;
-    yMin = Math.max(0, yMin - (yMax-yMin)*0.1);
-    yMax = yMax + (yMax-yMin)*0.12;
+    if(ymin===Infinity){ymin=0;ymax=1;}
+    if(ymax===ymin)ymax=ymin+1;
+    ymin=Math.max(0, ymin-(ymax-ymin)*0.1);
+    ymax=ymax+(ymax-ymin)*0.12;
 
-    function x(t){ return padL + ((t-tMin)/(tMax-tMin || 1))*plotW; }
-    function y(v){ return padT + plotH - ((v-yMin)/(yMax-yMin))*plotH; }
+    const X=t => L + ((t-t0)/(t1-t0 || 1))*PW;
+    const Y=v => T + PH - ((v-ymin)/(ymax-ymin))*PH;
 
-    series.forEach(s=>{
-      ctx.strokeStyle = s.color;
-      ctx.lineWidth = 2.5;
+    series.forEach(s => {
+      ctx.strokeStyle=s.color;
+      ctx.lineWidth=2.3;
       ctx.beginPath();
-      let started = false;
-      data.forEach(p=>{
-        const v = p[s.key];
-        if(v === null || v === undefined || isNaN(v)) return;
-        const px = x(p.t), py = y(v);
-        if(!started){ ctx.moveTo(px,py); started = true; }
-        else ctx.lineTo(px,py);
-      });
-      ctx.stroke();
+      let started=false;
 
-      ctx.fillStyle = s.color;
-      ctx.fillText(s.label, s.legendX || (w-140), s.legendY || 18);
+      data.forEach(p => {
+        const v=p[s.key];
+        if(v===null || v===undefined || isNaN(v)) return;
+        const x=X(p.t), y=Y(v);
+        if(!started){ctx.moveTo(x,y);started=true;}
+        else ctx.lineTo(x,y);
+      });
+
+      ctx.stroke();
+      ctx.fillStyle=s.color;
+      ctx.fillText(s.label, 730, s.y);
     });
 
-    ctx.fillStyle = '#64748b';
-    ctx.font = '12px Arial';
+    ctx.fillStyle="#667085";
+    ctx.font="12px Arial";
     for(let i=0;i<4;i++){
-      const idx = Math.floor((data.length-1) * i / 3);
-      const p = data[idx];
+      const idx=Math.floor((data.length-1)*i/3);
+      const p=data[idx];
       if(!p) continue;
-      ctx.fillText(fmtTime(p.t), x(p.t)-28, h-15);
+      ctx.fillText(fmtTime(p.t), X(p.t)-28, h-15);
     }
   }
 
-  function drawAllCharts(){
-    drawLineChart('sensorChart', livePoints, [
-      {key:'temp', label:'Température °C', color:'#0b55d9', legendX:720, legendY:18},
-      {key:'hum', label:'Humidité %', color:'#198754', legendX:720, legendY:36},
-      {key:'gas', label:'Gaz %', color:'#f59e0b', legendX:720, legendY:54}
-    ], 'Mesures live avec heure actuelle');
+  function drawRadar(){
+    if(!live || !el.radarCanvas) return;
 
-    drawLineChart('networkChart', networkPoints, [
-      {key:'wifi', label:'WiFi 0/1', color:'#198754', legendX:735, legendY:18},
-      {key:'mqtt', label:'MQTT 0/1', color:'#0b55d9', legendX:735, legendY:36},
-      {key:'offline', label:'Offline 0/1', color:'#f59e0b', legendX:735, legendY:54},
-      {key:'risk', label:'Risque', color:'#dc3545', legendX:735, legendY:72}
-    ], 'Timeline réseau et offline');
+    const c = el.radarCanvas;
+    const ctx = c.getContext("2d");
+    const w = c.width, h = c.height;
+    const cx=w/2, cy=h-18, maxRange=live.radarMax || 250;
+    const maxRadius=h-42;
 
-    drawLineChart('cpuChart', cpuPoints, [
-      {key:'c0', label:'Core 0 %', color:'#0b55d9', legendX:735, legendY:18},
-      {key:'c1', label:'Core 1 %', color:'#198754', legendX:735, legendY:36},
-      {key:'heap', label:'Heap kB', color:'#f59e0b', legendX:735, legendY:54}
-    ], 'Charge CPU estimée et mémoire');
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle="#f8fbff";
+    ctx.fillRect(0,0,w,h);
+
+    ctx.strokeStyle="#d9e2ef";
+    ctx.lineWidth=1;
+
+    for(let r=50;r<=maxRange;r+=50){
+      const rr=(r/maxRange)*maxRadius;
+      ctx.beginPath();
+      ctx.arc(cx,cy,rr,Math.PI,0);
+      ctx.stroke();
+      ctx.fillStyle="#667085";
+      ctx.font="11px Arial";
+      ctx.fillText(r+"cm",cx+rr-24,cy-5);
+    }
+
+    for(let a=0;a<=180;a+=30){
+      const rad=(Math.PI*a)/180;
+      const x=cx+Math.cos(Math.PI-rad)*maxRadius;
+      const y=cy-Math.sin(rad)*maxRadius;
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      ctx.lineTo(x,y);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle="rgba(11,85,217,.75)";
+    ctx.lineWidth=3;
+    const sweep=(Date.now()/20)%180;
+    const rad=(Math.PI*sweep)/180;
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.lineTo(cx+Math.cos(Math.PI-rad)*maxRadius, cy-Math.sin(rad)*maxRadius);
+    ctx.stroke();
+
+    if(live.distanceCm > 0){
+      const rr=(Math.min(live.distanceCm,maxRange)/maxRange)*maxRadius;
+      ctx.fillStyle=live.radarObject ? "#dc3545" : "#198754";
+      ctx.beginPath();
+      ctx.arc(cx,cy-rr,8,0,Math.PI*2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle="#071d49";
+    ctx.font="bold 13px Arial";
+    ctx.fillText("Radar HC-SR04",14,20);
   }
 
   async function action(cmd){
-    await fetch('/api/action?token=' + TOKEN + '&cmd=' + cmd + '&nocache=' + Date.now());
-    fetchLive();
-    loadEvents();
+    await fetch("/api/action?token="+TOKEN+"&cmd="+cmd+"&nocache="+Date.now());
+    await pollOnce();
+  }
+
+  async function led(name,on){
+    await fetch("/api/action?token="+TOKEN+"&cmd=led&led="+name+"&on="+on+"&nocache="+Date.now());
+    await pollOnce();
   }
 
   async function saveConfig(mqttOn){
     const q = new URLSearchParams();
-    q.set('token',TOKEN);
-    q.set('tempLimit',$('tempLimit').value);
-    q.set('humLow',$('humLow').value);
-    q.set('humHigh',$('humHigh').value);
-    q.set('gasLimit',$('gasLimit').value);
-    q.set('mqtt',mqttOn ? '1':'0');
-    q.set('mqttBase',$('mqttBase').value);
-    await fetch('/api/config?' + q.toString());
-    fetchLive();
+    q.set("token", TOKEN);
+    q.set("tempLimit", el.tempLimit.value);
+    q.set("humLow", el.humLow.value);
+    q.set("humHigh", el.humHigh.value);
+    q.set("gasLimit", el.gasLimit.value);
+    q.set("radarLimit", el.radarLimit.value);
+    q.set("mqtt", mqttOn ? "1" : "0");
+    q.set("mqttBase", el.mqttBase.value);
+    await fetch("/api/config?" + q.toString());
+    await pollOnce();
   }
 
-  // Snake léger
-  const snakeCanvas = $('snake');
-  const sctx = snakeCanvas.getContext('2d');
-  const cell = 18;
-  let snake = [{x:10,y:10}], dir={x:1,y:0}, food={x:5,y:5}, gameOver=false, score=0;
-
-  function resetSnake(){
-    snake=[{x:10,y:10}]; dir={x:1,y:0}; food={x:5,y:5}; gameOver=false; score=0;
+  async function pollOnce(){
+    try{
+      const res = await fetch("/api/live?nocache=" + Date.now());
+      live = await res.json();
+      updateUI(live);
+      drawVisible();
+    }catch(e){}
   }
 
-  function stepSnake(){
-    if(live){
-      if(live.joyDirection === 'LEFT' && dir.x !== 1) dir={x:-1,y:0};
-      if(live.joyDirection === 'RIGHT' && dir.x !== -1) dir={x:1,y:0};
-      if(live.joyDirection === 'UP' && dir.y !== 1) dir={x:0,y:-1};
-      if(live.joyDirection === 'DOWN' && dir.y !== -1) dir={x:0,y:1};
-      if(live.joyButton) resetSnake();
-    }
-
-    if(!gameOver){
-      const head={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
-      if(head.x<0||head.y<0||head.x>=20||head.y>=20||snake.some(p=>p.x===head.x&&p.y===head.y)){
-        gameOver=true;
-      }else{
-        snake.unshift(head);
-        if(head.x===food.x && head.y===food.y){
-          score++;
-          food={x:Math.floor(Math.random()*20),y:Math.floor(Math.random()*20)};
-        }else{
-          snake.pop();
-        }
-      }
-    }
-
-    drawSnake();
-  }
-
-  function drawSnake(){
-    sctx.clearRect(0,0,360,360);
-    sctx.fillStyle='#f8fbff'; sctx.fillRect(0,0,360,360);
-    sctx.fillStyle='#dc3545'; sctx.fillRect(food.x*cell,food.y*cell,cell-2,cell-2);
-    sctx.fillStyle='#073985';
-    snake.forEach(p=>sctx.fillRect(p.x*cell,p.y*cell,cell-2,cell-2));
-    sctx.fillStyle='#071d49'; sctx.font='bold 14px Arial'; sctx.fillText('Score: '+score,10,18);
-    if(gameOver){sctx.fillStyle='#dc3545';sctx.font='bold 28px Arial';sctx.fillText('GAME OVER',88,180);}
-  }
-
-  document.addEventListener('keydown',e=>{
-    if(e.key==='ArrowLeft' && dir.x!==1) dir={x:-1,y:0};
-    if(e.key==='ArrowRight' && dir.x!==-1) dir={x:1,y:0};
-    if(e.key==='ArrowUp' && dir.y!==1) dir={x:0,y:-1};
-    if(e.key==='ArrowDown' && dir.y!==-1) dir={x:0,y:1};
-    if(e.key===' ') resetSnake();
-  });
-
-  setInterval(stepSnake,180);
-
-  fetchLive();
+  text(el.clock, fmtTime(Date.now()));
+  setInterval(() => text(el.clock, fmtTime(Date.now())), 1000);
+  poll();
   loadEvents();
-  setTimeout(loadHistory,1500);
+  setTimeout(loadHistory, 1500);
+})();
 </script>
 </body>
 </html>
