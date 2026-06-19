@@ -560,7 +560,7 @@ extern const char index_html[] PROGMEM = R"rawliteral(
   </section>
 </main>
 
-<footer>© 2026 ESGI — Gérard De Viala — BALTACHE Othmane, BOUBAKER Oussema, MIVELLE Erwan</footer>
+<footer>© 2026 ESGI — DE VIALA ROSALES Gérard, BALTACHE Othmane, BOUBAKER Oussema, MIVELLE Erwan</footer>
 
 <script>
 (() => {

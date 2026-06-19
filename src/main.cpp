@@ -32,8 +32,8 @@ extern const char index_html[] PROGMEM;
 // =======================
 // WiFi
 // =======================
-const char* ssid = "iPhone de Othmane";
-const char* password = "othmane59";
+const char* ssid = "Campus-Eductive";
+const char* password = "R3s3@u-G3S";
 
 // =======================
 // Web security
